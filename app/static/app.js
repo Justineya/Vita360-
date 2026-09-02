@@ -22,6 +22,16 @@ let currentView = "write";
 let currentRecord = null;
 let deleteArmed = false;
 
+const _fetch = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const res = await _fetch(input, init);
+  const url = typeof input === "string" ? input : input.url;
+  if (res.status === 401 && url && !url.includes("/api/auth/")) {
+    window.location.href = "/login";
+  }
+  return res;
+};
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -545,6 +555,23 @@ async function runAsk(question) {
 
 document.getElementById("refresh-btn").addEventListener("click", loadTimeline);
 
+document.getElementById("logout-btn").addEventListener("click", async () => {
+  await _fetch("/api/auth/logout", { method: "POST" });
+  window.location.href = "/login";
+});
+
+async function loadSession() {
+  const res = await fetch("/api/auth/me");
+  if (!res.ok) return;
+  const data = await res.json();
+  const who = document.getElementById("header-user");
+  if (data.username) {
+    who.textContent = data.username;
+    who.hidden = false;
+  }
+}
+
 // Default landing: write view
 showView("write");
+loadSession();
 loadTimeline();

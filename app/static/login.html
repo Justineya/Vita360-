@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>登录 · Vita 360</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <div class="brand">
+      <span class="mark">V</span>
+      <div>
+        <strong>Vita 360</strong>
+        <span>个人健康档案</span>
+      </div>
+    </div>
+
+    <h1 id="auth-title">登录</h1>
+    <p class="auth-lead" id="auth-lead">输入账号和密码进入档案。以后放到网上，也是这一页。</p>
+
+    <form id="auth-form">
+      <label class="field">
+        账号
+        <input
+          type="text"
+          name="username"
+          id="username"
+          autocomplete="username"
+          maxlength="64"
+          required
+        />
+      </label>
+      <label class="field">
+        密码
+        <input
+          type="password"
+          name="password"
+          id="password"
+          autocomplete="current-password"
+          minlength="8"
+          maxlength="72"
+          required
+        />
+      </label>
+      <label class="field" id="password2-wrap" hidden>
+        确认密码
+        <input
+          type="password"
+          name="password2"
+          id="password2"
+          autocomplete="new-password"
+          minlength="8"
+          maxlength="72"
+        />
+      </label>
+      <p id="auth-msg" class="msg" role="status"></p>
+      <button type="submit" class="btn-primary" id="auth-submit">进入档案</button>
+    </form>
+
+    <p class="auth-switch" id="auth-switch" hidden>
+      还没有账号？
+      <button type="button" class="linkish" id="go-register">创建一个</button>
+    </p>
+    <p class="auth-note">密码只存在这台服务器，不会发给大模型。第一次使用请先创建账号；上线后默认不再开放注册。</p>
+  </main>
+  <script src="/static/login.js"></script>
+</body>
+</html>

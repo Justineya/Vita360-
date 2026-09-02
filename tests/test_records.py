@@ -32,6 +32,11 @@ def client(tmp_path, monkeypatch):
     from app.main import app
 
     with TestClient(app) as test_client:
+        setup = test_client.post(
+            "/api/auth/setup",
+            data={"username": "tester", "password": "secret123"},
+        )
+        assert setup.status_code == 200
         test_client.judge_calls = calls  # type: ignore[attr-defined]
         yield test_client
 

@@ -26,6 +26,24 @@ CREATE TABLE IF NOT EXISTS records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_visit_date ON records(visit_date DESC);
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 """
 
 
@@ -303,3 +321,94 @@ async def search_records(query: str, limit: int = 8) -> list[dict[str, Any]]:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(sql, params)
         return [dict(row) for row in await cursor.fetchall()]
+
+
+async def count_users() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM users")
+        row = await cursor.fetchone()
+        return int(row[0] if row else 0)
+
+
+async def create_user(username: str, password_hash: str) -> dict[str, Any]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """
+            INSERT INTO users (username, password_hash, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (username, password_hash, _now_iso()),
+        )
+        await db.commit()
+        return {"id": cursor.lastrowid, "username": username}
+
+
+async def get_user_by_username(username: str) -> dict[str, Any] | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, username, password_hash, created_at FROM users WHERE username = ? COLLATE NOCASE",
+            (username,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def get_user_by_id(user_id: int) -> dict[str, Any] | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT id, username, created_at FROM users WHERE id = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+
+async def create_session(token_hash: str, user_id: int, expires_at: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (token_hash, user_id, _now_iso(), expires_at),
+        )
+        await db.commit()
+
+
+async def get_user_by_session(token_hash: str) -> dict[str, Any] | None:
+    now = _now_iso()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """
+            SELECT u.id, u.username, u.created_at, s.expires_at
+            FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.token_hash = ?
+            """,
+            (token_hash,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        if (data.get("expires_at") or "") <= now:
+            await db.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+            await db.commit()
+            return None
+        data.pop("expires_at", None)
+        return data
+
+
+async def delete_session(token_hash: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
+        await db.commit()
+
+
+async def prune_expired_sessions() -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM sessions WHERE expires_at <= ?", (_now_iso(),))
+        await db.commit()

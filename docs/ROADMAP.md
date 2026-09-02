@@ -7,6 +7,7 @@
 - [x] 时间轴 + 关键词检索
 - [x] LLM 问答 / 一键综合分析
 - [x] 数据仅存本机 SQLite
+- [x] 账号密码登录（会话 Cookie，可直接用于上线）
 
 **适合**：你自己用、验证会不会坚持记。
 
@@ -21,7 +22,7 @@
 | 前端 | 现有静态页或 Next.js |
 | 后端 | Railway / Fly.io / 轻量 VPS 跑 FastAPI |
 | 数据 | 仍 SQLite（单实例）或 Turso |
-| 登录 | 简单 Basic Auth 或单用户 JWT |
+| 登录 | 账号密码 + HttpOnly 会话 Cookie（已实现；上线仍用这一套） |
 | LLM | 服务端环境变量 |
 
 **不要用 GitHub Pages** 承载 API。

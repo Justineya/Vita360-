@@ -1,13 +1,14 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import sqlite3
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import db
+from app import auth, db
 from app.classify import classification_tags
-from app.config import HOST, PORT, ROOT
+from app.config import ALLOW_REGISTER, HOST, PORT, ROOT
 from app.ingest import SUPPORTED_EXTENSIONS, extract_text, save_upload
 from app.journal import symptom_title, today_str
 from app.llm import analyze_summary, ask_llm, judge_symptom
@@ -18,6 +19,7 @@ STATIC_DIR = ROOT / "app" / "static"
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await db.init_db()
+    await db.prune_expired_sessions()
     yield
 
 
@@ -25,9 +27,137 @@ app = FastAPI(title="Health Archive", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    if auth.is_public_path(request.url.path):
+        return await call_next(request)
+    user = await auth.user_from_request(request)
+    if not user:
+        return auth.auth_required_response(request)
+    request.state.user = user
+    return await call_next(request)
+
+
+def _html(name: str) -> str:
+    return (STATIC_DIR / name).read_text(encoding="utf-8")
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if await auth.user_from_request(request):
+        return RedirectResponse("/", status_code=303)
+    return _html("login.html")
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    user = await auth.user_from_request(request)
+    return {
+        "authenticated": bool(user),
+        "username": user["username"] if user else None,
+        "needs_setup": (await db.count_users()) == 0,
+        "allow_register": ALLOW_REGISTER,
+    }
+
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    user = getattr(request.state, "user", None) or await auth.user_from_request(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    return {"username": user["username"], "id": user["id"]}
+
+
+async def _create_and_login(request: Request, username: str, password: str):
+    try:
+        username = auth.validate_username(username)
+        password = auth.validate_password(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    password_hash = await auth.hash_password(password)
+    try:
+        user = await db.create_user(username, password_hash)
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="这个账号已被使用") from exc
+    token, _ = await auth.issue_session(user["id"])
+    body = {"ok": True, "username": user["username"]}
+    response = JSONResponse(body)
+    auth.attach_session_cookie(response, request, token)
+    return response
+
+
+@app.post("/api/auth/setup")
+async def auth_setup(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    if await db.count_users() > 0:
+        raise HTTPException(status_code=409, detail="已有账号，请直接登录")
+    try:
+        auth.check_login_rate(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    return await _create_and_login(request, username, password)
+
+
+@app.post("/api/auth/register")
+async def auth_register(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    if not ALLOW_REGISTER:
+        raise HTTPException(status_code=403, detail="当前未开放注册")
+    if await db.count_users() == 0:
+        return await _create_and_login(request, username, password)
+    try:
+        auth.check_login_rate(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    return await _create_and_login(request, username, password)
+
+
+@app.post("/api/auth/login")
+async def auth_login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+):
+    try:
+        auth.check_login_rate(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    try:
+        username = auth.validate_username(username)
+        password = auth.validate_password(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    user = await db.get_user_by_username(username)
+    ok = bool(user) and await auth.verify_password(password, user["password_hash"])
+    if not ok:
+        raise HTTPException(status_code=401, detail="账号或密码不对")
+
+    auth.clear_login_rate(request)
+    await db.prune_expired_sessions()
+    token, _ = await auth.issue_session(user["id"])
+    response = JSONResponse({"ok": True, "username": user["username"]})
+    auth.attach_session_cookie(response, request, token)
+    return response
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    await auth.end_session(request)
+    response = JSONResponse({"ok": True})
+    auth.clear_session_cookie(response, request)
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    return _html("index.html")
 
 
 @app.get("/api/records")
