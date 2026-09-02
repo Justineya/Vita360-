@@ -28,7 +28,8 @@ body {
   background:
     radial-gradient(1200px 500px at 12% -10%, rgba(196, 163, 106, 0.18), transparent 55%),
     linear-gradient(180deg, #f3eadc 0%, var(--paper) 28%, #e9ddcb 100%);
-  font-family: "Noto Sans SC", "Songti SC", serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   font-size: 15px;
   line-height: 1.65;
   min-height: 100vh;
@@ -75,30 +76,28 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: "Cormorant Garamond", "Noto Serif SC", serif;
+  font-family: Georgia, "Times New Roman", serif;
   font-size: 1.85rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
   color: var(--burgundy);
 }
 
 .brand-latin {
   margin: 0 0 0.15rem;
-  font-family: "Cormorant Garamond", serif;
+  font-family: Georgia, "Times New Roman", serif;
   font-size: 0.82rem;
   font-weight: 600;
-  letter-spacing: 0.42em;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   color: var(--brass);
 }
 
 .brand h1 {
   margin: 0;
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: clamp(1.7rem, 3vw, 2.35rem);
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  line-height: 1.15;
+  font-size: clamp(1.55rem, 2.8vw, 2.1rem);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
 }
 
 .masthead-meta dl {
@@ -108,16 +107,14 @@ body {
 }
 
 .masthead-meta dt {
-  font-size: 0.68rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+  font-size: 0.72rem;
   color: var(--muted);
 }
 
 .masthead-meta dd {
   margin: 0.15rem 0 0;
-  font-family: "Noto Serif SC", serif;
   font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .status { display: flex; align-items: center; gap: 0.4rem; }
@@ -155,26 +152,24 @@ body {
 .stat-kicker,
 .kicker {
   margin: 0;
-  font-family: "Cormorant Garamond", serif;
   font-size: 0.72rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
   color: var(--brass);
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-value {
   margin: 0.35rem 0 0.1rem;
-  font-family: "Cormorant Garamond", "Noto Serif SC", serif;
+  font-family: Georgia, "Times New Roman", serif;
   font-size: 2rem;
   font-weight: 600;
   line-height: 1;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {
   margin: 0;
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
+  font-size: 0.82rem;
   color: var(--muted);
 }
 
@@ -208,11 +203,9 @@ body {
 }
 
 .panel-head h2 {
-  margin: 0.2rem 0 0;
-  font-family: "Noto Serif SC", serif;
-  font-size: 1.28rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 650;
 }
 
 .panel-desc {
@@ -237,9 +230,7 @@ body {
 .field-block > span {
   display: block;
   margin-bottom: 0.35rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
@@ -307,8 +298,8 @@ input:focus, select:focus, textarea:focus {
   background: var(--burgundy);
   color: #f7f1e6;
   padding: 0.62rem 1.2rem;
-  letter-spacing: 0.16em;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .btn-primary:hover { background: var(--burgundy-deep); }
@@ -318,8 +309,7 @@ input:focus, select:focus, textarea:focus {
   background: transparent;
   color: var(--ink);
   padding: 0.62rem 1.1rem;
-  letter-spacing: 0.14em;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
 }
 
 .btn-secondary:hover { background: var(--ink); color: var(--paper); }
@@ -329,8 +319,7 @@ input:focus, select:focus, textarea:focus {
   background: transparent;
   color: var(--ink-soft);
   padding: 0.32rem 0.7rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
+  font-size: 0.8rem;
 }
 
 .wide { width: 100%; }
@@ -350,8 +339,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--rule);
   background: transparent;
   padding: 0.28rem 0.65rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
+  font-size: 0.78rem;
   color: var(--muted);
 }
 
@@ -374,11 +362,10 @@ input:focus, select:focus, textarea:focus {
   list-style: none;
   margin: 0.9rem 0 0.4rem -0.85rem;
   padding: 0;
-  font-family: "Cormorant Garamond", serif;
-  font-size: 0.78rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: var(--brass);
+  font-variant-numeric: tabular-nums;
 }
 
 .timeline .entry {
@@ -419,9 +406,58 @@ input:focus, select:focus, textarea:focus {
 .badge.medical { color: var(--medical); }
 
 .timeline .title {
-  font-family: "Noto Serif SC", serif;
-  font-weight: 600;
+  font-weight: 650;
   font-size: 0.95rem;
+}
+
+.timeline .cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0.15rem;
+}
+
+.cat-pill {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--burgundy);
+  color: var(--burgundy);
+  font-size: 0.72rem;
+  background: rgba(111, 36, 48, 0.06);
+}
+
+.cat-pill.suspect {
+  border-color: var(--brass);
+  color: #6a5228;
+  background: rgba(138, 106, 59, 0.08);
+}
+
+.classify-result {
+  margin-top: 0.9rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--rule-strong);
+  background: #fcf8f0;
+}
+
+.classify-result[hidden] { display: none; }
+
+.classify-result .cr-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.classify-result .cr-line {
+  margin: 0.2rem 0;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.classify-result .cr-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .timeline .meta {
@@ -476,8 +512,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--rule-strong);
   background: transparent;
   padding: 0.28rem 0.7rem;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
+  font-size: 0.8rem;
   color: var(--ink-soft);
 }
 
@@ -514,17 +549,15 @@ input:focus, select:focus, textarea:focus {
 
 .empty-title {
   margin: 0 0 0.35rem;
-  font-family: "Noto Serif SC", serif;
   font-size: 1.05rem;
-  letter-spacing: 0.18em;
+  font-weight: 650;
   color: var(--ink);
 }
 
 .answer h4 {
   margin: 1rem 0 0.35rem;
-  font-family: "Noto Serif SC", serif;
   font-size: 0.95rem;
-  letter-spacing: 0.08em;
+  font-weight: 650;
 }
 
 .answer p { margin: 0.35rem 0; }
@@ -543,9 +576,8 @@ input:focus, select:focus, textarea:focus {
 
 .sources .src-title {
   flex: 1 0 100%;
-  font-family: "Noto Serif SC", serif;
   color: var(--ink);
-  letter-spacing: 0.12em;
+  font-weight: 650;
 }
 
 .archive-form {
@@ -567,7 +599,6 @@ input:focus, select:focus, textarea:focus {
   border-top: 1px solid var(--rule);
   color: var(--muted);
   font-size: 0.75rem;
-  letter-spacing: 0.04em;
 }
 
 .colophon p { margin: 0.15rem 0; }
@@ -604,8 +635,8 @@ input:focus, select:focus, textarea:focus {
 .drawer-panel h3 {
   margin: 0;
   grid-column: 1;
-  font-family: "Noto Serif SC", serif;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
+  font-weight: 650;
 }
 
 .drawer-panel .btn-ghost { grid-column: 2; grid-row: 1 / span 2; align-self: start; }

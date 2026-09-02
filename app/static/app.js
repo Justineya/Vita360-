@@ -72,6 +72,41 @@ function matchesFilter(record) {
   return true;
 }
 
+function categoryPills(record) {
+  if (record.record_type !== "symptom") return "";
+  const parts = [];
+  if (record.category) {
+    parts.push(`<span class="cat-pill">${escapeHtml(record.category)}</span>`);
+  }
+  for (const s of (record.suspected || []).slice(0, 2)) {
+    parts.push(`<span class="cat-pill suspect">${escapeHtml(s)}</span>`);
+  }
+  if (!parts.length) return "";
+  return `<div class="cats">${parts.join("")}</div>`;
+}
+
+function showClassification(result) {
+  const box = document.getElementById("classify-result");
+  if (!result) {
+    box.hidden = true;
+    box.innerHTML = "";
+    return;
+  }
+  const cats = (result.categories || [])
+    .map((c) => escapeHtml(c.label || c))
+    .join("、");
+  const suspected = (result.suspected || [])
+    .map((s) => `<li>${escapeHtml(s)}</li>`)
+    .join("");
+  box.innerHTML = `
+    <p class="cr-title">自动分类结果</p>
+    <p class="cr-line"><strong>系统分类：</strong>${escapeHtml(result.primary || "未分类")}${cats ? `（${cats}）` : ""}</p>
+    ${suspected ? `<p class="cr-line"><strong>疑似提示：</strong></p><ul>${suspected}</ul>` : ""}
+    <p class="cr-note">${escapeHtml(result.disclaimer || "仅供归档检索，不构成诊断。")}</p>
+  `;
+  box.hidden = false;
+}
+
 function renderTimeline(records) {
   const list = document.getElementById("timeline");
   const filtered = records.filter(matchesFilter);
@@ -98,12 +133,21 @@ function renderTimeline(records) {
     for (const r of items) {
       const isSymptom = r.record_type === "symptom";
       const kind = typeLabel[r.record_type] || r.record_type;
+      const preview =
+        r.text_preview && r.text_preview !== r.title
+          ? `<div class="preview">${escapeHtml(r.text_preview)}</div>`
+          : "";
+      const metaBits = [];
+      if (r.institution) metaBits.push(escapeHtml(r.institution));
+      else if (!isSymptom) metaBits.push("未注明机构");
+      if (r.tags && !isSymptom) metaBits.push(escapeHtml(r.tags));
       html.push(`
         <li class="entry ${isSymptom ? "symptom" : "medical"}" data-id="${r.id}">
           <span class="badge ${isSymptom ? "symptom" : "medical"}">${kind}</span>
           <div class="title">${escapeHtml(r.title)}</div>
-          <div class="meta">${escapeHtml(r.institution || (isSymptom ? "自觉症状" : "未注明机构"))}${r.tags ? " · " + escapeHtml(r.tags) : ""}</div>
-          ${r.text_preview ? `<div class="preview">${escapeHtml(r.text_preview)}</div>` : ""}
+          ${categoryPills(r)}
+          ${metaBits.length ? `<div class="meta">${metaBits.join(" · ")}</div>` : ""}
+          ${preview}
         </li>`);
     }
   }
@@ -129,10 +173,17 @@ async function openRecord(id) {
   const isSymptom = record.record_type === "symptom";
   document.getElementById("drawer-type").textContent = typeLabel[record.record_type] || "记录";
   document.getElementById("drawer-title").textContent = record.title || "未题名";
+
+  const classification = record.metadata?.classification;
+  const category = record.category || classification?.primary || "—";
+  const suspected = (record.suspected || classification?.suspected || []).join("；") || "—";
+
   document.getElementById("drawer-meta").innerHTML = `
     <dt>日期</dt><dd>${escapeHtml(formatDate(record.visit_date))}</dd>
     <dt>地区</dt><dd>${escapeHtml(regionLabel[record.region] || record.region || "—")}</dd>
     <dt>机构</dt><dd>${escapeHtml(record.institution || "—")}</dd>
+    ${isSymptom ? `<dt>分类</dt><dd>${escapeHtml(category)}</dd>` : ""}
+    ${isSymptom ? `<dt>疑似</dt><dd>${escapeHtml(suspected)}</dd>` : ""}
     <dt>标签</dt><dd>${escapeHtml(record.tags || "—")}</dd>
     ${record.file_name ? `<dt>附件</dt><dd>${escapeHtml(record.file_name)}</dd>` : ""}
   `;
@@ -167,6 +218,7 @@ document.getElementById("journal-form").addEventListener("submit", async (e) => 
   e.preventDefault();
   const msg = document.getElementById("journal-msg");
   setMsg(msg, "正在登记…");
+  showClassification(null);
   const form = e.target;
   const body = new FormData(form);
   if (!body.get("visit_date")) body.set("visit_date", todayISO());
@@ -176,7 +228,9 @@ document.getElementById("journal-form").addEventListener("submit", async (e) => 
     setMsg(msg, data.detail || "登记失败", true);
     return;
   }
-  setMsg(msg, `已入档 · 编号 ${data.id}`);
+  const primary = data.classification?.primary || "未分类";
+  setMsg(msg, `已入档 · 编号 ${data.id} · ${primary}`);
+  showClassification(data.classification);
   form.querySelector('[name="text"]').value = "";
   document.getElementById("char-count").textContent = "0";
   loadTimeline();

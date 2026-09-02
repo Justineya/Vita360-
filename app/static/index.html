@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Vita 360 · 个人健康档案</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
@@ -70,9 +67,8 @@
     <main class="layout">
       <section class="panel journal" aria-labelledby="journal-heading">
         <header class="panel-head">
-          <p class="kicker">Primary Chart</p>
           <h2 id="journal-heading">症状记录</h2>
-          <p class="panel-desc">按发生日期书写自觉症状、诱因与缓解情况。宜具体、宜连续，不必追求医学措辞。</p>
+          <p class="panel-desc">写下自觉症状、诱因与缓解情况。保存后会自动给出系统分类与疑似提示（仅供归档检索，不是诊断）。</p>
         </header>
         <form id="journal-form">
           <label class="field-block">
@@ -94,13 +90,13 @@
             <button type="submit" class="btn-primary">登记入档</button>
             <p id="journal-msg" class="msg" role="status"></p>
           </div>
+          <div id="classify-result" class="classify-result" hidden></div>
         </form>
       </section>
 
       <section class="panel timeline-panel" aria-labelledby="timeline-heading">
         <header class="panel-head split">
           <div>
-            <p class="kicker">Course</p>
             <h2 id="timeline-heading">病程时间轴</h2>
           </div>
           <div class="head-actions">
@@ -117,7 +113,6 @@
 
       <section class="panel analysis full" aria-labelledby="analysis-heading">
         <header class="panel-head">
-          <p class="kicker">Synthesis</p>
           <h2 id="analysis-heading">档案综述</h2>
           <p class="panel-desc">依据已入档的症状与检查材料作时间线梳理。密钥仅保存在服务端，分析结果供本人整理，不能替代面诊。</p>
         </header>
@@ -147,7 +142,6 @@
 
       <section class="panel archive full" aria-labelledby="archive-heading">
         <header class="panel-head">
-          <p class="kicker">Optional Annex</p>
           <h2 id="archive-heading">检查与就诊材料</h2>
           <p class="panel-desc">非主路径。有化验单、处方或门诊小结时再补入，综述时将与症状日记对照。</p>
         </header>

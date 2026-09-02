@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import db
+from app.classify import classification_tags, classify_symptom
 from app.config import HOST, PORT, ROOT
 from app.ingest import SUPPORTED_EXTENSIONS, extract_text, save_upload
 from app.journal import symptom_title, today_str
@@ -60,10 +61,15 @@ async def log_symptom(
     region: str = Form("OTHER"),
     tags: str = Form(""),
 ):
-    """Quick symptom diary — like chatting with Doubao, but persisted."""
+    """Quick symptom diary — classify on save for archive search."""
     body = text.strip()
     if not body:
         raise HTTPException(status_code=400, detail="内容不能为空")
+
+    classification = classify_symptom(body)
+    user_tags = tags.strip()
+    auto_tags = classification_tags(classification)
+    merged_tags = user_tags or auto_tags
 
     record_id = await db.insert_record(
         {
@@ -72,10 +78,16 @@ async def log_symptom(
             "record_type": "symptom",
             "title": symptom_title(body),
             "extracted_text": body,
-            "tags": tags.strip() or None,
+            "tags": merged_tags,
+            "metadata": {"classification": classification},
         }
     )
-    return {"id": record_id, "title": symptom_title(body)}
+    return {
+        "id": record_id,
+        "title": symptom_title(body),
+        "tags": merged_tags,
+        "classification": classification,
+    }
 
 
 @app.get("/api/journal")

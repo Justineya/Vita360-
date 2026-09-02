@@ -5,6 +5,7 @@ from typing import Any
 
 import aiosqlite
 
+from app.classify import classify_symptom
 from app.config import DB_PATH, DATA_DIR, RECORDS_DIR
 
 SCHEMA = """
@@ -69,6 +70,30 @@ async def insert_record(row: dict[str, Any]) -> int:
         return cursor.lastrowid
 
 
+def _attach_classification(row: dict[str, Any]) -> dict[str, Any]:
+    data = dict(row)
+    meta_raw = data.pop("metadata_json", None)
+    meta: dict[str, Any] = {}
+    if meta_raw:
+        try:
+            meta = json.loads(meta_raw)
+        except json.JSONDecodeError:
+            meta = {}
+    data["metadata"] = meta
+    classification = meta.get("classification") or {}
+    data["category"] = classification.get("primary")
+    data["suspected"] = list(classification.get("suspected") or [])
+
+    # Backfill display classification for older symptom rows
+    if data.get("record_type") == "symptom" and not data["category"]:
+        text = (data.get("extracted_text") or data.get("text_preview") or data.get("title") or "")
+        inferred = classify_symptom(text)
+        data["category"] = inferred["primary"]
+        data["suspected"] = inferred["suspected"]
+        data["classification_inferred"] = True
+    return data
+
+
 async def list_records(limit: int = 200) -> list[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -76,6 +101,7 @@ async def list_records(limit: int = 200) -> list[dict[str, Any]]:
             """
             SELECT id, created_at, visit_date, region, institution,
                    record_type, title, file_name, notes, tags,
+                   metadata_json,
                    substr(extracted_text, 1, 300) AS text_preview
             FROM records
             ORDER BY visit_date DESC, id DESC
@@ -84,7 +110,7 @@ async def list_records(limit: int = 200) -> list[dict[str, Any]]:
             (limit,),
         )
         rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        return [_attach_classification(dict(row)) for row in rows]
 
 
 async def get_record(record_id: int) -> dict[str, Any] | None:
@@ -94,10 +120,7 @@ async def get_record(record_id: int) -> dict[str, Any] | None:
         row = await cursor.fetchone()
         if not row:
             return None
-        data = dict(row)
-        if data.get("metadata_json"):
-            data["metadata"] = json.loads(data["metadata_json"])
-        return data
+        return _attach_classification(dict(row))
 
 
 async def list_recent_medical(limit: int = 15) -> list[dict[str, Any]]:
