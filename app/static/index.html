@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>个人健康档案</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>个人健康档案</h1>
+    <p class="sub">随手记症状 · 偶尔补报告 · AI 综合你自己的时间线</p>
+  </header>
+
+  <main class="grid">
+    <section class="card full highlight">
+      <h2>记症状</h2>
+      <p class="hint">像和豆包闲聊一样写就行，例如：今天胃不舒服，打嗝胀气，晚饭后加重。</p>
+      <form id="journal-form">
+        <textarea name="text" rows="4" placeholder="今天胃不舒服，打嗝胀气…" required></textarea>
+        <div class="row">
+          <label>日期 <input type="date" name="visit_date" id="journal-date" /></label>
+          <label>标签 <input type="text" name="tags" placeholder="胃,消化" /></label>
+        </div>
+        <button type="submit">记下</button>
+      </form>
+      <p id="journal-msg" class="msg"></p>
+    </section>
+
+    <section class="card full">
+      <h2>综合分析</h2>
+      <form id="ask-form">
+        <textarea name="question" rows="2" placeholder="例：最近肠胃症状有什么规律？和上次化验有没有关系？" required></textarea>
+        <div class="chips">
+          <button type="button" id="analyze-once-btn" class="chip primary">一键综合分析（全部档案）</button>
+          <button type="button" class="chip" data-q="综合分析我最近的症状记录，按时间线梳理">最近症状梳理</button>
+          <button type="button" class="chip" data-q="胃相关症状出现过几次，有什么共同特点？">胃部症状</button>
+          <button type="button" class="chip" data-q="我的症状记录和化验/就诊记录有什么可对上的地方？">症状 vs 检查</button>
+        </div>
+        <button type="submit">分析</button>
+      </form>
+      <div id="answer" class="answer"></div>
+      <ul id="sources" class="sources"></ul>
+    </section>
+
+    <section class="card">
+      <h2>时间轴</h2>
+      <button type="button" id="refresh-btn" class="ghost">刷新</button>
+      <ul id="timeline" class="timeline"></ul>
+    </section>
+
+    <section class="card">
+      <h2>上传报告（可选）</h2>
+      <details>
+        <summary>化验 / 处方 / PDF</summary>
+        <form id="upload-form" class="inner-form">
+          <label>就诊日期 <input type="date" name="visit_date" required /></label>
+          <label>地区
+            <select name="region" required>
+              <option value="HK">香港</option>
+              <option value="SZ">深圳</option>
+              <option value="OTHER">其他</option>
+            </select>
+          </label>
+          <label>类型
+            <select name="record_type" required>
+              <option value="lab">化验</option>
+              <option value="imaging">影像</option>
+              <option value="prescription">处方</option>
+              <option value="visit">门诊小结</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label>标题 <input type="text" name="title" placeholder="肝功能复查" required /></label>
+          <label>机构 <input type="text" name="institution" placeholder="港大深圳医院" /></label>
+          <label>备注 <textarea name="notes" rows="2"></textarea></label>
+          <label>附件 <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md" /></label>
+          <button type="submit">保存</button>
+        </form>
+        <p id="upload-msg" class="msg"></p>
+      </details>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

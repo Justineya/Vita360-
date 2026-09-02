@@ -1,0 +1,17 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# data/ 与 .env：健康数据与密钥绝不提交
+data/*
+!data/records/
+data/records/*
+!data/records/.gitkeep
+
+reports/context.md
+reports/analysis.md
+
+# 本地配置
+*.local
