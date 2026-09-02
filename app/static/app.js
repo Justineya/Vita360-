@@ -9,8 +9,16 @@ const typeLabel = {
 
 const regionLabel = { HK: "香港", SZ: "深圳", OTHER: "其他" };
 
+const FLOW_HINTS = {
+  write: "今天先记一条就够了。看病程、做分析是后一步；报告只在有化验单时再补。",
+  timeline: "这里回看整段病程。点条目看全文；筛「仅症状」或「仅检查」更清楚。",
+  analyze: "有几条症状后再分析更有用。一键综述适合复诊前整理。",
+  archive: "这是附录，不是每天要做的事。有纸质/PDF 报告时再来归档。",
+};
+
 let allRecords = [];
 let activeFilter = "all";
+let currentView = "write";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -48,6 +56,22 @@ function renderMarkdownLite(text) {
     .replace(/\n/g, "<br>");
 }
 
+function showView(name) {
+  currentView = name;
+  document.querySelectorAll(".view").forEach((el) => {
+    const on = el.id === `view-${name}`;
+    el.hidden = !on;
+    el.classList.toggle("active", on);
+  });
+  document.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === name);
+  });
+  document.getElementById("flow-hint").textContent = FLOW_HINTS[name] || "";
+  if (name === "analyze") updateAnalyzeGate();
+  if (name === "timeline") renderTimeline(allRecords);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function updateStats(records) {
   const symptoms = records.filter((r) => r.record_type === "symptom");
   const reports = records.filter((r) => r.record_type !== "symptom");
@@ -55,15 +79,19 @@ function updateStats(records) {
 
   document.getElementById("stat-symptoms").textContent = String(symptoms.length);
   document.getElementById("stat-reports").textContent = String(reports.length);
+  document.getElementById("stat-span").textContent = dates.length
+    ? `${daysBetween(dates[0], dates[dates.length - 1])} 日`
+    : "—";
+  updateAnalyzeGate();
+}
 
-  if (dates.length) {
-    const span = daysBetween(dates[0], dates[dates.length - 1]);
-    document.getElementById("stat-span").textContent = `${span} 日`;
-    document.getElementById("stat-latest").textContent = formatDate(dates[dates.length - 1]).replace(/^\d{4}年/, "");
-  } else {
-    document.getElementById("stat-span").textContent = "—";
-    document.getElementById("stat-latest").textContent = "尚无";
-  }
+function updateAnalyzeGate() {
+  const symptoms = allRecords.filter((r) => r.record_type === "symptom").length;
+  const gate = document.getElementById("analyze-gate");
+  const body = document.getElementById("analyze-body");
+  const blocked = symptoms < 3;
+  gate.hidden = !blocked;
+  body.hidden = blocked;
 }
 
 function matchesFilter(record) {
@@ -81,8 +109,7 @@ function categoryPills(record) {
   for (const s of (record.suspected || []).slice(0, 2)) {
     parts.push(`<span class="cat-pill suspect">${escapeHtml(s)}</span>`);
   }
-  if (!parts.length) return "";
-  return `<div class="cats">${parts.join("")}</div>`;
+  return parts.length ? `<div class="cats">${parts.join("")}</div>` : "";
 }
 
 function showClassification(result) {
@@ -99,12 +126,40 @@ function showClassification(result) {
     .map((s) => `<li>${escapeHtml(s)}</li>`)
     .join("");
   box.innerHTML = `
-    <p class="cr-title">自动分类结果</p>
+    <p class="cr-title">已记下，并完成自动分类</p>
     <p class="cr-line"><strong>系统分类：</strong>${escapeHtml(result.primary || "未分类")}${cats ? `（${cats}）` : ""}</p>
     ${suspected ? `<p class="cr-line"><strong>疑似提示：</strong></p><ul>${suspected}</ul>` : ""}
     <p class="cr-note">${escapeHtml(result.disclaimer || "仅供归档检索，不构成诊断。")}</p>
+    <div class="next-actions">
+      <button type="button" class="btn-secondary" data-go="timeline">去看病程</button>
+      <button type="button" class="linkish" id="write-another">继续记下一条</button>
+    </div>
   `;
   box.hidden = false;
+  box.querySelector("#write-another")?.addEventListener("click", () => {
+    box.hidden = true;
+    document.querySelector('#journal-form [name="text"]').focus();
+  });
+}
+
+function renderRecent(records) {
+  const list = document.getElementById("recent-list");
+  const recent = records.slice(0, 3);
+  if (!recent.length) {
+    list.innerHTML = `<li class="empty">还没有记录。写下第一条症状，就会出现在这里。</li>`;
+    return;
+  }
+  list.innerHTML = recent
+    .map((r) => {
+      const isSymptom = r.record_type === "symptom";
+      return `
+      <li data-id="${r.id}">
+        <div class="title">${escapeHtml(r.title)}</div>
+        <div class="meta">${escapeHtml(formatDate(r.visit_date))} · ${typeLabel[r.record_type] || r.record_type}${r.category ? " · " + escapeHtml(r.category) : ""}</div>
+        ${isSymptom ? categoryPills(r) : ""}
+      </li>`;
+    })
+    .join("");
 }
 
 function renderTimeline(records) {
@@ -112,7 +167,7 @@ function renderTimeline(records) {
   const filtered = records.filter(matchesFilter);
 
   if (!records.length) {
-    list.innerHTML = `<li class="empty">尚无记录。请先在左侧登记一条今日症状，作为病程起点。</li>`;
+    list.innerHTML = `<li class="empty">尚无记录。回到「记症状」写下第一条。</li>`;
     return;
   }
   if (!filtered.length) {
@@ -137,16 +192,12 @@ function renderTimeline(records) {
         r.text_preview && r.text_preview !== r.title
           ? `<div class="preview">${escapeHtml(r.text_preview)}</div>`
           : "";
-      const metaBits = [];
-      if (r.institution) metaBits.push(escapeHtml(r.institution));
-      else if (!isSymptom) metaBits.push("未注明机构");
-      if (r.tags && !isSymptom) metaBits.push(escapeHtml(r.tags));
       html.push(`
         <li class="entry ${isSymptom ? "symptom" : "medical"}" data-id="${r.id}">
-          <span class="badge ${isSymptom ? "symptom" : "medical"}">${kind}</span>
+          <span class="badge">${kind}</span>
           <div class="title">${escapeHtml(r.title)}</div>
           ${categoryPills(r)}
-          ${metaBits.length ? `<div class="meta">${metaBits.join(" · ")}</div>` : ""}
+          ${r.institution ? `<div class="meta">${escapeHtml(r.institution)}</div>` : ""}
           ${preview}
         </li>`);
     }
@@ -155,13 +206,12 @@ function renderTimeline(records) {
 }
 
 async function loadTimeline() {
-  const list = document.getElementById("timeline");
-  list.innerHTML = `<li class="loading">正在读取档案…</li>`;
   const res = await fetch("/api/records");
   const data = await res.json();
   allRecords = data.records || [];
   updateStats(allRecords);
-  renderTimeline(allRecords);
+  renderRecent(allRecords);
+  if (currentView === "timeline") renderTimeline(allRecords);
 }
 
 async function openRecord(id) {
@@ -200,7 +250,7 @@ function showAnswer(text, isEmpty) {
   const answerEl = document.getElementById("answer");
   answerEl.classList.toggle("is-empty", Boolean(isEmpty));
   if (isEmpty) {
-    answerEl.innerHTML = `<p class="empty-title">尚无综述</p><p>${escapeHtml(text)}</p>`;
+    answerEl.innerHTML = `<p class="empty-title">还没有分析结果</p><p>${escapeHtml(text)}</p>`;
     return;
   }
   answerEl.innerHTML = renderMarkdownLite(text);
@@ -208,6 +258,18 @@ function showAnswer(text, isEmpty) {
 
 document.getElementById("header-date").textContent = formatDate(todayISO());
 document.getElementById("journal-date").value = todayISO();
+
+document.querySelectorAll(".nav-item[data-view]").forEach((btn) => {
+  btn.addEventListener("click", () => showView(btn.dataset.view));
+});
+
+document.body.addEventListener("click", (e) => {
+  const go = e.target.closest("[data-go]");
+  if (go) {
+    e.preventDefault();
+    showView(go.dataset.go);
+  }
+});
 
 const journalText = document.querySelector('#journal-form [name="text"]');
 journalText.addEventListener("input", () => {
@@ -217,7 +279,7 @@ journalText.addEventListener("input", () => {
 document.getElementById("journal-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = document.getElementById("journal-msg");
-  setMsg(msg, "正在登记…");
+  setMsg(msg, "正在保存…");
   showClassification(null);
   const form = e.target;
   const body = new FormData(form);
@@ -225,15 +287,15 @@ document.getElementById("journal-form").addEventListener("submit", async (e) => 
   const res = await fetch("/api/journal", { method: "POST", body });
   const data = await res.json();
   if (!res.ok) {
-    setMsg(msg, data.detail || "登记失败", true);
+    setMsg(msg, data.detail || "保存失败", true);
     return;
   }
   const primary = data.classification?.primary || "未分类";
-  setMsg(msg, `已入档 · 编号 ${data.id} · ${primary}`);
+  setMsg(msg, `已保存 · ${primary}`);
   showClassification(data.classification);
   form.querySelector('[name="text"]').value = "";
   document.getElementById("char-count").textContent = "0";
-  loadTimeline();
+  await loadTimeline();
 });
 
 document.getElementById("upload-form").addEventListener("submit", async (e) => {
@@ -248,9 +310,9 @@ document.getElementById("upload-form").addEventListener("submit", async (e) => {
     setMsg(msg, data.detail || "归档失败", true);
     return;
   }
-  setMsg(msg, `材料已归档 · 编号 ${data.id}`);
+  setMsg(msg, `已归档 · 编号 ${data.id}`);
   form.reset();
-  loadTimeline();
+  await loadTimeline();
 });
 
 document.getElementById("ask-form").addEventListener("submit", async (e) => {
@@ -260,7 +322,7 @@ document.getElementById("ask-form").addEventListener("submit", async (e) => {
 
 document.getElementById("analyze-once-btn").addEventListener("click", async () => {
   const sourcesEl = document.getElementById("sources");
-  showAnswer("正在综览全部档案，约需十余秒…");
+  showAnswer("正在综览全部档案…");
   sourcesEl.innerHTML = "";
   const res = await fetch("/api/analyze/summary", { method: "POST" });
   const data = await res.json();
@@ -298,6 +360,12 @@ document.getElementById("timeline").addEventListener("click", (e) => {
   openRecord(item.dataset.id);
 });
 
+document.getElementById("recent-list").addEventListener("click", (e) => {
+  const item = e.target.closest("li[data-id]");
+  if (!item) return;
+  openRecord(item.dataset.id);
+});
+
 document.getElementById("drawer-close").addEventListener("click", closeDrawer);
 document.getElementById("drawer").addEventListener("click", (e) => {
   if (e.target.id === "drawer") closeDrawer();
@@ -329,4 +397,7 @@ async function runAsk(question) {
 }
 
 document.getElementById("refresh-btn").addEventListener("click", loadTimeline);
+
+// Default landing: write view
+showView("write");
 loadTimeline();

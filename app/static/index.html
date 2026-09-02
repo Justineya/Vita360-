@@ -7,194 +7,192 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="page">
-    <header class="masthead">
-      <div class="masthead-left">
-        <div class="seal" aria-hidden="true">
-          <span class="seal-ring"></span>
-          <span class="seal-mark">V</span>
-        </div>
-        <div class="brand">
-          <p class="brand-latin">Vita 360</p>
-          <h1>个人健康档案</h1>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark">V</span>
+        <div>
+          <strong>Vita 360</strong>
+          <span>个人健康档案</span>
         </div>
       </div>
-      <div class="masthead-meta">
-        <dl>
-          <div>
-            <dt>档案性质</dt>
-            <dd>私人 · 本机存储</dd>
-          </div>
-          <div>
-            <dt>今日</dt>
-            <dd id="header-date">—</dd>
-          </div>
-          <div>
-            <dt>服务状态</dt>
-            <dd class="status"><span class="dot"></span>本地运行</dd>
-          </div>
-        </dl>
+      <nav class="nav" aria-label="主流程">
+        <button type="button" class="nav-item active" data-view="write">
+          <em>1</em><span>记症状</span>
+        </button>
+        <button type="button" class="nav-item" data-view="timeline">
+          <em>2</em><span>看病程</span>
+        </button>
+        <button type="button" class="nav-item" data-view="analyze">
+          <em>3</em><span>做分析</span>
+        </button>
+        <button type="button" class="nav-item quiet" data-view="archive">
+          <em>附</em><span>补报告</span>
+        </button>
+      </nav>
+      <div class="top-meta">
+        <span id="header-date"></span>
+        <span class="count" title="已入档症状条数">症状 <b id="stat-symptoms">0</b></span>
       </div>
     </header>
 
-    <p class="lede">
-      以症状日记为病程主线，必要时归档化验与就诊材料。综合分析仅基于您本人的时间轴，供整理与复诊参考，不构成诊疗意见。
+    <p class="flow-hint" id="flow-hint">
+      今天先记一条就够了。看病程、做分析是后一步；报告只在有化验单时再补。
     </p>
 
-    <section class="stats" aria-label="档案摘要">
-      <article>
-        <p class="stat-kicker">01</p>
-        <p class="stat-value" id="stat-symptoms">0</p>
-        <p class="stat-label">症状记录</p>
-      </article>
-      <article>
-        <p class="stat-kicker">02</p>
-        <p class="stat-value" id="stat-reports">0</p>
-        <p class="stat-label">检查 / 就诊</p>
-      </article>
-      <article>
-        <p class="stat-kicker">03</p>
-        <p class="stat-value" id="stat-span">—</p>
-        <p class="stat-label">档案跨度</p>
-      </article>
-      <article>
-        <p class="stat-kicker">04</p>
-        <p class="stat-value" id="stat-latest">尚无</p>
-        <p class="stat-label">最近条目</p>
-      </article>
-    </section>
-
-    <main class="layout">
-      <section class="panel journal" aria-labelledby="journal-heading">
-        <header class="panel-head">
-          <h2 id="journal-heading">症状记录</h2>
-          <p class="panel-desc">写下自觉症状、诱因与缓解情况。保存后会自动给出系统分类与疑似提示（仅供归档检索，不是诊断）。</p>
+    <!-- 1. 记症状：默认主路径 -->
+    <section class="view active" id="view-write" aria-labelledby="write-title">
+      <div class="stage">
+        <header class="stage-head">
+          <p class="step">第 1 步 · 日常主路径</p>
+          <h1 id="write-title">现在感觉怎样？</h1>
+          <p>像记笔记一样写。保存后系统会给出分类与疑似提示，方便以后检索——不是诊断。</p>
         </header>
-        <form id="journal-form">
-          <label class="field-block">
-            <span>主诉 / 当日记述</span>
-            <textarea name="text" rows="7" maxlength="4000" placeholder="例：晚饭后上腹胀满，伴嗳气；步行约十分钟后稍缓。无发热，无呕吐。" required></textarea>
-            <span class="counter"><span id="char-count">0</span> / 4000</span>
-          </label>
-          <div class="row">
-            <label class="field">
-              <span>发生日期</span>
+
+        <form id="journal-form" class="write-card">
+          <textarea
+            name="text"
+            rows="8"
+            maxlength="4000"
+            placeholder="例：晚饭后上腹胀，打嗝；走一会儿好一点。没有发烧。"
+            required
+          ></textarea>
+          <div class="write-toolbar">
+            <label>
+              日期
               <input type="date" name="visit_date" id="journal-date" />
             </label>
-            <label class="field">
-              <span>检索标签</span>
-              <input type="text" name="tags" placeholder="胃 · 消化 · 夜间" />
+            <label>
+              标签（可选）
+              <input type="text" name="tags" placeholder="不填则自动生成" />
             </label>
+            <span class="counter"><span id="char-count">0</span>/4000</span>
+            <button type="submit" class="btn-primary">记下这一条</button>
           </div>
-          <div class="form-actions">
-            <button type="submit" class="btn-primary">登记入档</button>
-            <p id="journal-msg" class="msg" role="status"></p>
-          </div>
-          <div id="classify-result" class="classify-result" hidden></div>
+          <p id="journal-msg" class="msg" role="status"></p>
         </form>
-      </section>
 
-      <section class="panel timeline-panel" aria-labelledby="timeline-heading">
-        <header class="panel-head split">
-          <div>
-            <h2 id="timeline-heading">病程时间轴</h2>
+        <div id="classify-result" class="result-card" hidden></div>
+
+        <aside class="recent-strip" aria-labelledby="recent-title">
+          <div class="recent-head">
+            <h2 id="recent-title">刚才与近日</h2>
+            <button type="button" class="linkish" data-go="timeline">查看完整病程 →</button>
           </div>
-          <div class="head-actions">
-            <div class="filter-pills" role="tablist" aria-label="筛选类型">
-              <button type="button" class="pill active" data-filter="all">全部</button>
-              <button type="button" class="pill" data-filter="symptom">症状</button>
-              <button type="button" class="pill" data-filter="medical">检查</button>
-            </div>
+          <ul id="recent-list" class="recent-list"></ul>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 2. 看病程 -->
+    <section class="view" id="view-timeline" aria-labelledby="timeline-title" hidden>
+      <div class="stage wide">
+        <header class="stage-head">
+          <p class="step">第 2 步 · 回顾</p>
+          <h1 id="timeline-title">病程时间轴</h1>
+          <p>按日期回看已记症状与检查材料。点一条可看全文与分类。</p>
+        </header>
+
+        <div class="toolbar">
+          <div class="filter-pills" role="tablist" aria-label="筛选">
+            <button type="button" class="pill active" data-filter="all">全部</button>
+            <button type="button" class="pill" data-filter="symptom">仅症状</button>
+            <button type="button" class="pill" data-filter="medical">仅检查</button>
+          </div>
+          <div class="toolbar-right">
+            <span class="muted">检查 <b id="stat-reports">0</b> · 跨度 <b id="stat-span">—</b></span>
             <button type="button" id="refresh-btn" class="btn-ghost">刷新</button>
           </div>
-        </header>
+        </div>
         <ol id="timeline" class="timeline"></ol>
-      </section>
+      </div>
+    </section>
 
-      <section class="panel analysis full" aria-labelledby="analysis-heading">
-        <header class="panel-head">
-          <h2 id="analysis-heading">档案综述</h2>
-          <p class="panel-desc">依据已入档的症状与检查材料作时间线梳理。密钥仅保存在服务端，分析结果供本人整理，不能替代面诊。</p>
+    <!-- 3. 做分析 -->
+    <section class="view" id="view-analyze" aria-labelledby="analyze-title" hidden>
+      <div class="stage">
+        <header class="stage-head">
+          <p class="step">第 3 步 · 有几条记录后再用</p>
+          <h1 id="analyze-title">综合分析</h1>
+          <p>对照你自己的时间轴提问，或一键生成综述。Key 只在服务端，结果不能替代面诊。</p>
         </header>
-        <form id="ask-form" class="ask-grid">
-          <label class="field-block">
-            <span>提出问题</span>
-            <textarea name="question" rows="3" placeholder="例：近两周胃肠症状的出现规律，与八月化验是否可对照？" required></textarea>
-          </label>
-          <div class="ask-side">
-            <button type="button" id="analyze-once-btn" class="btn-primary wide">生成综合综述</button>
-            <button type="submit" class="btn-secondary wide">就该问题分析</button>
-          </div>
-        </form>
-        <div class="chips" aria-label="常用问题">
-          <button type="button" class="chip" data-q="综合分析我最近的症状记录，按时间线梳理">近况梳理</button>
-          <button type="button" class="chip" data-q="胃相关症状出现过几次，有什么共同特点？">胃部模式</button>
-          <button type="button" class="chip" data-q="我的症状记录和化验/就诊记录有什么可对上的地方？">症状与检查对照</button>
-        </div>
-        <div class="analysis-frame">
-          <div id="answer" class="answer is-empty">
-            <p class="empty-title">尚无综述</p>
-            <p>登记若干症状后，可生成面向复诊的时间线摘要。</p>
-          </div>
-          <ul id="sources" class="sources"></ul>
-        </div>
-      </section>
 
-      <section class="panel archive full" aria-labelledby="archive-heading">
-        <header class="panel-head">
-          <h2 id="archive-heading">检查与就诊材料</h2>
-          <p class="panel-desc">非主路径。有化验单、处方或门诊小结时再补入，综述时将与症状日记对照。</p>
+        <div class="analyze-gate" id="analyze-gate" hidden>
+          <p>建议至少先记下 <strong>3 条症状</strong>，分析才有意义。</p>
+          <button type="button" class="btn-primary" data-go="write">先去记症状</button>
+        </div>
+
+        <div id="analyze-body">
+          <form id="ask-form" class="analyze-card">
+            <label class="field-block">
+              <span>你想弄清什么？</span>
+              <textarea name="question" rows="3" placeholder="例：近两周胃肠症状有没有规律？和化验能不能对上？" required></textarea>
+            </label>
+            <div class="chips" aria-label="常用问题">
+              <button type="button" class="chip" data-q="综合分析我最近的症状记录，按时间线梳理">近况梳理</button>
+              <button type="button" class="chip" data-q="胃相关症状出现过几次，有什么共同特点？">胃部模式</button>
+              <button type="button" class="chip" data-q="我的症状记录和化验/就诊记录有什么可对上的地方？">症状与检查对照</button>
+            </div>
+            <div class="analyze-actions">
+              <button type="button" id="analyze-once-btn" class="btn-primary">一键综合综述</button>
+              <button type="submit" class="btn-secondary">按上面的问题分析</button>
+            </div>
+          </form>
+          <div class="analysis-frame">
+            <div id="answer" class="answer is-empty">
+              <p class="empty-title">还没有分析结果</p>
+              <p>有几条症状后，点「一键综合综述」即可。</p>
+            </div>
+            <ul id="sources" class="sources"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 附. 补报告 -->
+    <section class="view" id="view-archive" aria-labelledby="archive-title" hidden>
+      <div class="stage">
+        <header class="stage-head">
+          <p class="step">附录 · 可选</p>
+          <h1 id="archive-title">补检查 / 就诊材料</h1>
+          <p>主路径仍是记症状。只有手里有化验单、处方或门诊小结时，再来这里归档。</p>
         </header>
-        <form id="upload-form" class="archive-form">
-          <label class="field">
-            <span>就诊日期</span>
-            <input type="date" name="visit_date" required />
-          </label>
-          <label class="field">
-            <span>地区</span>
-            <select name="region" required>
-              <option value="HK">香港</option>
-              <option value="SZ">深圳</option>
-              <option value="OTHER">其他</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>类型</span>
-            <select name="record_type" required>
-              <option value="lab">化验</option>
-              <option value="imaging">影像</option>
-              <option value="prescription">处方</option>
-              <option value="visit">门诊小结</option>
-              <option value="other">其他</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>标题</span>
-            <input type="text" name="title" placeholder="肝功能复查" required />
-          </label>
-          <label class="field">
-            <span>机构</span>
-            <input type="text" name="institution" placeholder="港大深圳医院" />
-          </label>
-          <label class="field span-2">
-            <span>备注</span>
-            <textarea name="notes" rows="2" placeholder="摘录异常项、医生口头说明等"></textarea>
-          </label>
-          <label class="field file-field span-2">
-            <span>附件（PDF / 文本 / 图片）</span>
-            <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md" />
-          </label>
-          <div class="form-actions span-2">
-            <button type="submit" class="btn-secondary">归档材料</button>
+
+        <form id="upload-form" class="archive-card">
+          <div class="grid-3">
+            <label class="field">就诊日期 <input type="date" name="visit_date" required /></label>
+            <label class="field">地区
+              <select name="region" required>
+                <option value="HK">香港</option>
+                <option value="SZ">深圳</option>
+                <option value="OTHER">其他</option>
+              </select>
+            </label>
+            <label class="field">类型
+              <select name="record_type" required>
+                <option value="lab">化验</option>
+                <option value="imaging">影像</option>
+                <option value="prescription">处方</option>
+                <option value="visit">门诊小结</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+            <label class="field">标题 <input type="text" name="title" placeholder="肝功能复查" required /></label>
+            <label class="field">机构 <input type="text" name="institution" placeholder="港大深圳医院" /></label>
+            <label class="field">附件 <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md" /></label>
+          </div>
+          <label class="field">备注 <textarea name="notes" rows="2" placeholder="异常项、医生说明等"></textarea></label>
+          <div class="form-actions">
+            <button type="submit" class="btn-secondary">归档这份材料</button>
+            <button type="button" class="linkish" data-go="write">返回记症状</button>
             <p id="upload-msg" class="msg" role="status"></p>
           </div>
         </form>
-      </section>
-    </main>
+      </div>
+    </section>
 
-    <footer class="colophon">
-      <p>Vita 360 · Confidential health ledger · 数据存于本机 SQLite，勿将 <code>data/</code> 或 <code>.env</code> 提交至公开仓库。</p>
-      <p>本系统不提供诊断、处方或紧急医疗指导。</p>
+    <footer class="foot">
+      数据仅存本机 · 不替代医生面诊 · 勿将 <code>data/</code>、<code>.env</code> 提交公开仓库
     </footer>
   </div>
 
