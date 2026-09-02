@@ -83,6 +83,9 @@ def _attach_classification(row: dict[str, Any]) -> dict[str, Any]:
     classification = meta.get("classification") or {}
     data["category"] = classification.get("primary")
     data["suspected"] = list(classification.get("suspected") or [])
+    data["summary"] = classification.get("summary") or ""
+    data["advice"] = classification.get("advice") or ""
+    data["judge_method"] = classification.get("method") or ""
 
     # Backfill display classification for older symptom rows
     if data.get("record_type") == "symptom" and not data["category"]:
@@ -121,6 +124,56 @@ async def get_record(record_id: int) -> dict[str, Any] | None:
         if not row:
             return None
         return _attach_classification(dict(row))
+
+
+async def update_record(record_id: int, fields: dict[str, Any]) -> bool:
+    """Update allowed columns. Returns False if record missing."""
+    if await get_record(record_id) is None:
+        return False
+    allowed = {
+        "visit_date",
+        "region",
+        "institution",
+        "record_type",
+        "title",
+        "extracted_text",
+        "notes",
+        "tags",
+        "metadata",
+    }
+    data = {k: v for k, v in fields.items() if k in allowed}
+    if not data:
+        return True
+
+    cols: list[str] = []
+    params: list[Any] = []
+    for key, value in data.items():
+        if key == "metadata":
+            cols.append("metadata_json = ?")
+            params.append(json.dumps(value or {}, ensure_ascii=False))
+        else:
+            cols.append(f"{key} = ?")
+            params.append(value)
+    params.append(record_id)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            f"UPDATE records SET {', '.join(cols)} WHERE id = ?",
+            params,
+        )
+        await db.commit()
+        return True
+
+
+async def delete_record(record_id: int) -> dict[str, Any] | None:
+    """Delete a record and return the deleted row (for file cleanup)."""
+    existing = await get_record(record_id)
+    if not existing:
+        return None
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM records WHERE id = ?", (record_id,))
+        await db.commit()
+    return existing
 
 
 async def list_recent_medical(limit: int = 15) -> list[dict[str, Any]]:

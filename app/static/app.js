@@ -19,6 +19,8 @@ const FLOW_HINTS = {
 let allRecords = [];
 let activeFilter = "all";
 let currentView = "write";
+let currentRecord = null;
+let deleteArmed = false;
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -125,9 +127,23 @@ function showClassification(result) {
   const suspected = (result.suspected || [])
     .map((s) => `<li>${escapeHtml(s)}</li>`)
     .join("");
+  const methodLabel =
+    result.method === "llm"
+      ? "大模型基本判断"
+      : result.method === "rules_fallback"
+        ? "规则回退（模型暂不可用）"
+        : "规则归类";
+  const summary = result.summary
+    ? `<p class="cr-line"><strong>基本判断：</strong>${escapeHtml(result.summary)}</p>`
+    : "";
+  const advice = result.advice
+    ? `<p class="cr-line"><strong>观察建议：</strong>${escapeHtml(result.advice)}</p>`
+    : "";
   box.innerHTML = `
-    <p class="cr-title">已记下，并完成自动分类</p>
+    <p class="cr-title">已记下，并完成${methodLabel}</p>
     <p class="cr-line"><strong>系统分类：</strong>${escapeHtml(result.primary || "未分类")}${cats ? `（${cats}）` : ""}</p>
+    ${summary}
+    ${advice}
     ${suspected ? `<p class="cr-line"><strong>疑似提示：</strong></p><ul>${suspected}</ul>` : ""}
     <p class="cr-note">${escapeHtml(result.disclaimer || "仅供归档检索，不构成诊断。")}</p>
     <div class="next-actions">
@@ -189,9 +205,11 @@ function renderTimeline(records) {
       const isSymptom = r.record_type === "symptom";
       const kind = typeLabel[r.record_type] || r.record_type;
       const preview =
-        r.text_preview && r.text_preview !== r.title
-          ? `<div class="preview">${escapeHtml(r.text_preview)}</div>`
-          : "";
+        r.summary && r.record_type === "symptom"
+          ? `<div class="preview judge">${escapeHtml(r.summary)}</div>`
+          : r.text_preview && r.text_preview !== r.title
+            ? `<div class="preview">${escapeHtml(r.text_preview)}</div>`
+            : "";
       html.push(`
         <li class="entry ${isSymptom ? "symptom" : "medical"}" data-id="${r.id}">
           <span class="badge">${kind}</span>
@@ -214,36 +232,90 @@ async function loadTimeline() {
   if (currentView === "timeline") renderTimeline(allRecords);
 }
 
+function fillDrawer(record) {
+  currentRecord = record;
+  deleteArmed = false;
+  const isSymptom = record.record_type === "symptom";
+  document.getElementById("drawer-type").textContent = typeLabel[record.record_type] || "记录";
+  document.getElementById("drawer-title").textContent = record.title || "未题名";
+
+  const classification = record.metadata?.classification || {};
+  const category = record.category || classification.primary || "—";
+  const suspected = (record.suspected || classification.suspected || []).join("；") || "—";
+  const fileLink = record.file_name
+    ? `<a href="/api/records/${record.id}/file">${escapeHtml(record.file_name)}</a>`
+    : "";
+
+  document.getElementById("drawer-meta").innerHTML = `
+    <dt>日期</dt><dd>${escapeHtml(formatDate(record.visit_date))}</dd>
+    <dt>地区</dt><dd>${escapeHtml(regionLabel[record.region] || record.region || "—")}</dd>
+    ${isSymptom ? "" : `<dt>机构</dt><dd>${escapeHtml(record.institution || "—")}</dd>`}
+    ${isSymptom ? `<dt>分类</dt><dd>${escapeHtml(category)}</dd>` : ""}
+    ${isSymptom ? `<dt>疑似</dt><dd>${escapeHtml(suspected)}</dd>` : ""}
+    <dt>标签</dt><dd>${escapeHtml(record.tags || "—")}</dd>
+    ${fileLink ? `<dt>附件</dt><dd>${fileLink}</dd>` : ""}
+  `;
+
+  const judge = document.getElementById("drawer-judge");
+  const summary = record.summary || classification.summary || "";
+  const advice = record.advice || classification.advice || "";
+  const method = record.judge_method || classification.method || "";
+  if (isSymptom && (summary || advice)) {
+    const methodLabel =
+      method === "llm" ? "大模型" : method === "rules_fallback" ? "规则回退" : method === "rules" ? "规则" : "";
+    judge.innerHTML = `
+      ${summary ? `<p><span class="jb-k">基本判断</span><br>${escapeHtml(summary)}</p>` : ""}
+      ${advice ? `<p><span class="jb-k">观察建议</span><br>${escapeHtml(advice)}</p>` : ""}
+      ${methodLabel ? `<p class="jb-method">${methodLabel} · 不构成诊断</p>` : ""}
+    `;
+    judge.hidden = false;
+  } else {
+    judge.hidden = true;
+    judge.innerHTML = "";
+  }
+
+  document.getElementById("drawer-body").textContent =
+    record.extracted_text || record.notes || (isSymptom ? "无正文。" : "无摘录文本。");
+  document.getElementById("drawer-msg").textContent = "";
+  document.getElementById("delete-confirm").hidden = true;
+  document.getElementById("drawer-actions").hidden = false;
+  document.getElementById("drawer-view").hidden = false;
+  document.getElementById("drawer-edit-form").hidden = true;
+}
+
+function showEditForm() {
+  if (!currentRecord) return;
+  const isSymptom = currentRecord.record_type === "symptom";
+  document.getElementById("drawer-view").hidden = true;
+  const form = document.getElementById("drawer-edit-form");
+  form.hidden = false;
+  document.getElementById("edit-type").value = currentRecord.record_type || "";
+  document.getElementById("edit-date").value = currentRecord.visit_date || todayISO();
+  document.getElementById("edit-region").value = currentRecord.region || "OTHER";
+  document.getElementById("edit-tags").value = currentRecord.tags || "";
+  document.getElementById("edit-symptom-fields").hidden = !isSymptom;
+  document.getElementById("edit-medical-fields").hidden = isSymptom;
+  document.getElementById("edit-text").required = isSymptom;
+  document.getElementById("edit-text").value = currentRecord.extracted_text || "";
+  document.getElementById("edit-title").value = currentRecord.title || "";
+  document.getElementById("edit-institution").value = currentRecord.institution || "";
+  document.getElementById("edit-notes").value = currentRecord.notes || "";
+  setMsg(document.getElementById("edit-msg"), "");
+}
+
 async function openRecord(id) {
   const drawer = document.getElementById("drawer");
   const res = await fetch(`/api/records/${id}`);
   const record = await res.json();
   if (!res.ok) return;
-
-  const isSymptom = record.record_type === "symptom";
-  document.getElementById("drawer-type").textContent = typeLabel[record.record_type] || "记录";
-  document.getElementById("drawer-title").textContent = record.title || "未题名";
-
-  const classification = record.metadata?.classification;
-  const category = record.category || classification?.primary || "—";
-  const suspected = (record.suspected || classification?.suspected || []).join("；") || "—";
-
-  document.getElementById("drawer-meta").innerHTML = `
-    <dt>日期</dt><dd>${escapeHtml(formatDate(record.visit_date))}</dd>
-    <dt>地区</dt><dd>${escapeHtml(regionLabel[record.region] || record.region || "—")}</dd>
-    <dt>机构</dt><dd>${escapeHtml(record.institution || "—")}</dd>
-    ${isSymptom ? `<dt>分类</dt><dd>${escapeHtml(category)}</dd>` : ""}
-    ${isSymptom ? `<dt>疑似</dt><dd>${escapeHtml(suspected)}</dd>` : ""}
-    <dt>标签</dt><dd>${escapeHtml(record.tags || "—")}</dd>
-    ${record.file_name ? `<dt>附件</dt><dd>${escapeHtml(record.file_name)}</dd>` : ""}
-  `;
-  document.getElementById("drawer-body").textContent =
-    record.extracted_text || record.notes || (isSymptom ? "无正文。" : "无摘录文本。");
+  fillDrawer(record);
   drawer.hidden = false;
 }
 
 function closeDrawer() {
   document.getElementById("drawer").hidden = true;
+  currentRecord = null;
+  deleteArmed = false;
 }
 
 function showAnswer(text, isEmpty) {
@@ -279,23 +351,32 @@ journalText.addEventListener("input", () => {
 document.getElementById("journal-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = document.getElementById("journal-msg");
-  setMsg(msg, "正在保存…");
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  setMsg(msg, "正在保存，并请模型做基本判断…");
   showClassification(null);
+  submitBtn.disabled = true;
   const form = e.target;
   const body = new FormData(form);
   if (!body.get("visit_date")) body.set("visit_date", todayISO());
-  const res = await fetch("/api/journal", { method: "POST", body });
-  const data = await res.json();
-  if (!res.ok) {
-    setMsg(msg, data.detail || "保存失败", true);
-    return;
+  try {
+    const res = await fetch("/api/journal", { method: "POST", body });
+    const data = await res.json();
+    if (!res.ok) {
+      setMsg(msg, data.detail || "保存失败", true);
+      return;
+    }
+    const primary = data.classification?.primary || "未分类";
+    const via = data.classification?.method === "llm" ? "模型判断" : "规则归类";
+    setMsg(msg, `已保存 · ${primary} · ${via}`);
+    showClassification(data.classification);
+    form.querySelector('[name="text"]').value = "";
+    document.getElementById("char-count").textContent = "0";
+    await loadTimeline();
+  } catch (err) {
+    setMsg(msg, "保存失败，请稍后重试", true);
+  } finally {
+    submitBtn.disabled = false;
   }
-  const primary = data.classification?.primary || "未分类";
-  setMsg(msg, `已保存 · ${primary}`);
-  showClassification(data.classification);
-  form.querySelector('[name="text"]').value = "";
-  document.getElementById("char-count").textContent = "0";
-  await loadTimeline();
 });
 
 document.getElementById("upload-form").addEventListener("submit", async (e) => {
@@ -372,6 +453,72 @@ document.getElementById("drawer").addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeDrawer();
+});
+
+document.getElementById("drawer-edit").addEventListener("click", showEditForm);
+document.getElementById("edit-cancel").addEventListener("click", () => {
+  if (!currentRecord) return;
+  fillDrawer(currentRecord);
+});
+
+document.getElementById("drawer-edit-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!currentRecord) return;
+  const msg = document.getElementById("edit-msg");
+  const saveBtn = document.getElementById("edit-save");
+  const isSymptom = currentRecord.record_type === "symptom";
+  const textChanged =
+    isSymptom &&
+    (document.getElementById("edit-text").value || "").trim() !==
+      (currentRecord.extracted_text || "").trim();
+  setMsg(msg, textChanged ? "正在保存并重新判断…" : "正在保存…");
+  saveBtn.disabled = true;
+  const form = e.target;
+  const body = new FormData(form);
+  try {
+    const res = await fetch(`/api/records/${currentRecord.id}`, { method: "PATCH", body });
+    const data = await res.json();
+    if (!res.ok) {
+      setMsg(msg, data.detail || "保存失败", true);
+      return;
+    }
+    fillDrawer(data.record);
+    if (data.classification?.summary) {
+      setMsg(document.getElementById("drawer-msg"), "已更新，并完成重新判断");
+    } else {
+      setMsg(document.getElementById("drawer-msg"), "已更新");
+    }
+    await loadTimeline();
+  } catch (err) {
+    setMsg(msg, "保存失败，请稍后重试", true);
+  } finally {
+    saveBtn.disabled = false;
+  }
+});
+
+document.getElementById("drawer-delete").addEventListener("click", () => {
+  deleteArmed = true;
+  document.getElementById("drawer-actions").hidden = true;
+  document.getElementById("delete-confirm").hidden = false;
+});
+
+document.getElementById("delete-no").addEventListener("click", () => {
+  deleteArmed = false;
+  document.getElementById("delete-confirm").hidden = true;
+  document.getElementById("drawer-actions").hidden = false;
+});
+
+document.getElementById("delete-yes").addEventListener("click", async () => {
+  if (!currentRecord || !deleteArmed) return;
+  const id = currentRecord.id;
+  const res = await fetch(`/api/records/${id}`, { method: "DELETE" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    setMsg(document.getElementById("drawer-msg"), data.detail || "删除失败", true);
+    return;
+  }
+  closeDrawer();
+  await loadTimeline();
 });
 
 async function runAsk(question) {

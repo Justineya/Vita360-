@@ -603,7 +603,7 @@ body {
 .drawer[hidden] { display: none; }
 
 .drawer-panel {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
   height: 100%;
   background: var(--card);
   padding: 1.2rem;
@@ -649,6 +649,74 @@ body {
 .drawer-body {
   white-space: pre-wrap;
   line-height: 1.75;
+}
+
+.judge-box {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #fecdd3;
+  background: var(--accent-soft);
+  border-radius: 10px;
+  font-size: 0.88rem;
+}
+
+.judge-box p { margin: 0.25rem 0; }
+.judge-box .jb-k { color: var(--muted); font-size: 0.75rem; }
+.judge-box .jb-method {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.btn-danger {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+}
+
+.btn-danger:hover { background: var(--accent-soft); }
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.confirm-bar {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px dashed var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+
+.confirm-bar p {
+  margin: 0 0 0.55rem;
+  font-size: 0.88rem;
+}
+
+.edit-form .field { margin-bottom: 0.75rem; }
+.edit-form .field-hint {
+  margin: -0.4rem 0 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.timeline .preview.judge {
+  color: var(--brass);
 }
 
 @media (max-width: 720px) {

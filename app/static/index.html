@@ -46,7 +46,7 @@
         <header class="stage-head">
           <p class="step">第 1 步 · 日常主路径</p>
           <h1 id="write-title">现在感觉怎样？</h1>
-          <p>像记笔记一样写。保存后系统会给出分类与疑似提示，方便以后检索——不是诊断。</p>
+          <p>像记笔记一样写。保存时会请大模型做一次基本判断（分类、一句话判断与观察建议），方便以后检索——不是诊断。</p>
         </header>
 
         <form id="journal-form" class="write-card">
@@ -90,7 +90,7 @@
         <header class="stage-head">
           <p class="step">第 2 步 · 回顾</p>
           <h1 id="timeline-title">病程时间轴</h1>
-          <p>按日期回看已记症状与检查材料。点一条可看全文与分类。</p>
+          <p>按日期回看已记症状与检查材料。点一条可看全文、编辑或删除。</p>
         </header>
 
         <div class="toolbar">
@@ -203,8 +203,51 @@
         <h3 id="drawer-title"></h3>
         <button type="button" id="drawer-close" class="btn-ghost">关闭</button>
       </header>
-      <dl class="drawer-meta" id="drawer-meta"></dl>
-      <div class="drawer-body" id="drawer-body"></div>
+
+      <div id="drawer-view">
+        <dl class="drawer-meta" id="drawer-meta"></dl>
+        <div class="judge-box" id="drawer-judge" hidden></div>
+        <div class="drawer-body" id="drawer-body"></div>
+        <p id="drawer-msg" class="msg" role="status"></p>
+        <div class="drawer-actions" id="drawer-actions">
+          <button type="button" id="drawer-edit" class="btn-secondary">编辑</button>
+          <button type="button" id="drawer-delete" class="btn-danger">删除</button>
+        </div>
+        <div class="confirm-bar" id="delete-confirm" hidden>
+          <p>删除后无法恢复。确认删掉这条？</p>
+          <button type="button" id="delete-yes" class="btn-danger">确认删除</button>
+          <button type="button" id="delete-no" class="btn-ghost">取消</button>
+        </div>
+      </div>
+
+      <form id="drawer-edit-form" class="edit-form" hidden>
+        <input type="hidden" name="record_type" id="edit-type" />
+        <label class="field">日期 <input type="date" name="visit_date" id="edit-date" required /></label>
+        <label class="field">地区
+          <select name="region" id="edit-region">
+            <option value="HK">香港</option>
+            <option value="SZ">深圳</option>
+            <option value="OTHER">其他</option>
+          </select>
+        </label>
+        <div id="edit-symptom-fields">
+          <label class="field">症状正文
+            <textarea name="text" id="edit-text" rows="8" maxlength="4000" required></textarea>
+          </label>
+          <p class="field-hint">改动正文后会重新请模型做基本判断。</p>
+        </div>
+        <div id="edit-medical-fields" hidden>
+          <label class="field">标题 <input type="text" name="title" id="edit-title" /></label>
+          <label class="field">机构 <input type="text" name="institution" id="edit-institution" /></label>
+          <label class="field">备注 <textarea name="notes" id="edit-notes" rows="4"></textarea></label>
+        </div>
+        <label class="field">标签 <input type="text" name="tags" id="edit-tags" /></label>
+        <p id="edit-msg" class="msg" role="status"></p>
+        <div class="drawer-actions">
+          <button type="submit" class="btn-primary" id="edit-save">保存修改</button>
+          <button type="button" class="btn-ghost" id="edit-cancel">取消</button>
+        </div>
+      </form>
     </div>
   </aside>
 

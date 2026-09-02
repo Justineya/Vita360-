@@ -141,6 +141,8 @@ def classify_symptom(text: str) -> dict[str, Any]:
             "primary_id": "other",
             "categories": [],
             "suspected": [],
+            "summary": "内容过短，暂无法归类。",
+            "advice": "补充部位、诱因和是否持续/加重，便于以后检索。",
             "method": "rules",
             "disclaimer": "仅供个人记录归档，不构成诊断。",
         }
@@ -180,6 +182,12 @@ def classify_symptom(text: str) -> dict[str, Any]:
         "primary_id": primary_id,
         "categories": categories,
         "suspected": suspected,
+        "summary": (
+            f"规则归类为「{primary}」。"
+            if primary != "未分类"
+            else "暂无法归入明确系统，可再补充细节。"
+        ),
+        "advice": "若持续、加重或出现报警症状，应就医面诊；此处不是诊断。",
         "method": "rules",
         "disclaimer": "规则自动归类，供检索与整理；不构成诊断或就医建议。",
     }

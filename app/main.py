@@ -6,11 +6,11 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import db
-from app.classify import classification_tags, classify_symptom
+from app.classify import classification_tags
 from app.config import HOST, PORT, ROOT
 from app.ingest import SUPPORTED_EXTENSIONS, extract_text, save_upload
 from app.journal import symptom_title, today_str
-from app.llm import analyze_summary, ask_llm
+from app.llm import analyze_summary, ask_llm, judge_symptom
 
 STATIC_DIR = ROOT / "app" / "static"
 
@@ -54,6 +54,36 @@ async def download_file(record_id: int):
     return FileResponse(path, filename=record.get("file_name") or path.name)
 
 
+def _build_symptom_payload(
+    body: str,
+    visit_date: str,
+    region: str,
+    tags: str,
+    *,
+    reclassify: bool = True,
+    existing_meta: dict | None = None,
+) -> dict:
+    classification = judge_symptom(body) if reclassify else (
+        (existing_meta or {}).get("classification") or judge_symptom(body)
+    )
+    user_tags = tags.strip()
+    auto_tags = classification_tags(classification)
+    merged_tags = user_tags or auto_tags
+    meta = dict(existing_meta or {})
+    meta["classification"] = classification
+    return {
+        "visit_date": visit_date.strip() or today_str(),
+        "region": region or "OTHER",
+        "record_type": "symptom",
+        "title": symptom_title(body),
+        "extracted_text": body,
+        "tags": merged_tags,
+        "metadata": meta,
+        "classification": classification,
+        "merged_tags": merged_tags,
+    }
+
+
 @app.post("/api/journal")
 async def log_symptom(
     text: str = Form(...),
@@ -61,32 +91,28 @@ async def log_symptom(
     region: str = Form("OTHER"),
     tags: str = Form(""),
 ):
-    """Quick symptom diary — classify on save for archive search."""
+    """Save symptom and run LLM basic judgment (rules fallback)."""
     body = text.strip()
     if not body:
         raise HTTPException(status_code=400, detail="内容不能为空")
 
-    classification = classify_symptom(body)
-    user_tags = tags.strip()
-    auto_tags = classification_tags(classification)
-    merged_tags = user_tags or auto_tags
-
+    payload = _build_symptom_payload(body, visit_date, region, tags)
     record_id = await db.insert_record(
         {
-            "visit_date": visit_date.strip() or today_str(),
-            "region": region,
+            "visit_date": payload["visit_date"],
+            "region": payload["region"],
             "record_type": "symptom",
-            "title": symptom_title(body),
-            "extracted_text": body,
-            "tags": merged_tags,
-            "metadata": {"classification": classification},
+            "title": payload["title"],
+            "extracted_text": payload["extracted_text"],
+            "tags": payload["merged_tags"],
+            "metadata": payload["metadata"],
         }
     )
     return {
         "id": record_id,
-        "title": symptom_title(body),
-        "tags": merged_tags,
-        "classification": classification,
+        "title": payload["title"],
+        "tags": payload["merged_tags"],
+        "classification": payload["classification"],
     }
 
 
@@ -140,6 +166,95 @@ async def create_record(
         }
     )
     return {"id": record_id, "extracted_chars": len(extracted)}
+
+
+@app.patch("/api/records/{record_id}")
+async def patch_record(
+    record_id: int,
+    visit_date: str = Form(""),
+    region: str = Form(""),
+    title: str = Form(""),
+    institution: str = Form(""),
+    notes: str = Form(""),
+    tags: str = Form(""),
+    text: str = Form(""),
+    reclassify: str = Form("1"),
+):
+    """Edit an existing record. Symptoms re-run LLM judgment when text changes."""
+    existing = await db.get_record(record_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    do_reclassify = reclassify.strip() not in {"0", "false", "False", "no"}
+    classification = (existing.get("metadata") or {}).get("classification")
+    fields: dict = {}
+
+    if existing.get("record_type") == "symptom":
+        body = (text if text != "" else (existing.get("extracted_text") or "")).strip()
+        if not body:
+            raise HTTPException(status_code=400, detail="症状内容不能为空")
+        text_changed = body != (existing.get("extracted_text") or "").strip()
+        need_judge = do_reclassify and text_changed
+        tag_input = tags.strip() if tags != "" else (existing.get("tags") or "")
+        if need_judge:
+            payload = _build_symptom_payload(
+                body,
+                visit_date or existing.get("visit_date") or "",
+                region or existing.get("region") or "OTHER",
+                tag_input,
+                reclassify=True,
+                existing_meta=existing.get("metadata") or {},
+            )
+            fields = {
+                "visit_date": payload["visit_date"],
+                "region": payload["region"],
+                "title": payload["title"],
+                "extracted_text": payload["extracted_text"],
+                "tags": tags.strip() if tags.strip() else payload["merged_tags"],
+                "metadata": payload["metadata"],
+            }
+            classification = payload["classification"]
+        else:
+            fields = {
+                "visit_date": (visit_date.strip() or existing.get("visit_date")),
+                "region": (region.strip() or existing.get("region") or "OTHER"),
+                "title": symptom_title(body),
+                "extracted_text": body,
+                "tags": tags.strip() if tags != "" else existing.get("tags"),
+            }
+    else:
+        fields = {
+            "visit_date": visit_date.strip() or existing.get("visit_date"),
+            "region": region.strip() or existing.get("region"),
+            "title": title.strip() or existing.get("title"),
+            "institution": institution.strip() or None,
+            "notes": notes.strip() or None,
+            "tags": tags.strip() or None if tags != "" else existing.get("tags"),
+        }
+        if notes.strip() and not existing.get("file_path"):
+            fields["extracted_text"] = notes.strip()
+
+    ok = await db.update_record(record_id, fields)
+    if not ok:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    record = await db.get_record(record_id)
+    return {"record": record, "classification": classification}
+
+
+@app.delete("/api/records/{record_id}")
+async def remove_record(record_id: int):
+    deleted = await db.delete_record(record_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    file_path = deleted.get("file_path")
+    if file_path:
+        path = Path(file_path)
+        try:
+            if path.exists() and path.is_file():
+                path.unlink()
+        except OSError:
+            pass
+    return {"ok": True, "id": record_id}
 
 
 @app.post("/api/analyze/summary")

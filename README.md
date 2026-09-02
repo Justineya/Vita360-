@@ -8,7 +8,8 @@
 
 ## 功能（Phase 1 · 个人自用）
 
-- **症状日记**：像闲聊一样记「今天胃胀、打嗝…」（主路径）
+- **症状日记**：像闲聊一样记「今天胃胀、打嗝…」（主路径）；每次新增都会调用大模型做基本判断（失败则回退到本地规则）
+- **病程编辑 / 删除**：时间轴里可改正文、日期，或删掉记错的条目
 - **综合分析**：跨多条症状 + 报告做时间线梳理
 - **上传报告（可选）**：PDF / 文本
 - **一键综合分析**：`POST /api/analyze/summary`
@@ -50,9 +51,12 @@ bash scripts/setup.sh
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/journal` | 记一条症状 |
+| POST | `/api/journal` | 记一条症状（服务端调用 LLM 做基本判断） |
 | POST | `/api/records` | 上传报告 |
 | GET | `/api/records` | 时间轴列表 |
+| GET | `/api/records/{id}` | 单条详情 |
+| PATCH | `/api/records/{id}` | 编辑；症状正文变更时会重新判断 |
+| DELETE | `/api/records/{id}` | 删除记录（含本地附件） |
 | POST | `/api/ask` | 提问分析 |
 | POST | `/api/analyze/summary` | 一键综合分析 |
 
