@@ -888,6 +888,36 @@ body {
   font-size: 0.75rem;
 }
 
+.auth-accounts {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fafaf9;
+}
+
+.auth-accounts-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.auth-accounts ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.auth-accounts li { font-size: 0.82rem; }
+.auth-accounts code {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+.auth-accounts .linkish { font-size: 0.82rem; }
+
 @media (max-width: 860px) {
   .timeline-layout { grid-template-columns: 1fr; }
   .cal-panel { position: static; }

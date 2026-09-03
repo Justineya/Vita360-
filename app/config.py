@@ -36,3 +36,8 @@ SEED_ON_START = os.getenv("SEED_ON_START", "1").strip().lower() in {
 }
 SEED_USERNAME = os.getenv("SEED_USERNAME", "admin").strip() or "admin"
 SEED_PASSWORD = os.getenv("SEED_PASSWORD", "admin")
+# Extra demo accounts: "alice:alice1,bob:bob123" — each user only sees their own records.
+SEED_ACCOUNTS = os.getenv(
+    "SEED_ACCOUNTS",
+    "admin:admin,alice:alice1,bob:bob123",
+).strip()

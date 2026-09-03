@@ -73,12 +73,37 @@ document.getElementById("auth-form").addEventListener("submit", async (e) => {
   }
 });
 
+function showTestAccounts(accounts) {
+  const box = document.getElementById("auth-accounts");
+  const list = document.getElementById("auth-accounts-list");
+  if (!accounts?.length) {
+    box.hidden = true;
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = accounts
+    .map(
+      (a) =>
+        `<li><button type="button" class="linkish fill-account" data-user="${a.username}" data-pass="${a.password}"><code>${a.username}</code> / <code>${a.password}</code></button></li>`
+    )
+    .join("");
+  box.hidden = false;
+  list.querySelectorAll(".fill-account").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.getElementById("username").value = btn.dataset.user || "";
+      document.getElementById("password").value = btn.dataset.pass || "";
+      document.getElementById("username").focus();
+    });
+  });
+}
+
 (async () => {
   try {
     const data = await loadStatus();
     if (!data) return;
     current = data;
     modeUI(data.needs_setup ? "setup" : "login", Boolean(data.allow_register));
+    if (!data.needs_setup) showTestAccounts(data.test_accounts || []);
   } catch (_err) {
     modeUI("login", false);
     setMsg("无法连接服务", true);

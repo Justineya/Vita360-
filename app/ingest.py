@@ -33,8 +33,10 @@ def extract_text(path: Path) -> str:
     return ""
 
 
-def save_upload(filename: str, content: bytes) -> Path:
+def save_upload(filename: str, content: bytes, user_id: int | None = None) -> Path:
     safe_name = re.sub(r"[^\w.\-]", "_", filename)
-    dest = RECORDS_DIR / f"{uuid.uuid4().hex[:8]}_{safe_name}"
+    folder = RECORDS_DIR / str(user_id) if user_id is not None else RECORDS_DIR
+    folder.mkdir(parents=True, exist_ok=True)
+    dest = folder / f"{uuid.uuid4().hex[:8]}_{safe_name}"
     dest.write_bytes(content)
     return dest

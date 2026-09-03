@@ -62,7 +62,11 @@
       还没有账号？
       <button type="button" class="linkish" id="go-register">创建一个</button>
     </p>
-    <p class="auth-note">密码只存在这台服务器，不会发给大模型。默认不开放注册。</p>
+    <div class="auth-accounts" id="auth-accounts" hidden>
+      <p class="auth-accounts-title">测试账号（数据互相隔离）</p>
+      <ul id="auth-accounts-list"></ul>
+    </div>
+    <p class="auth-note">密码只存在这台服务器，不会发给大模型。默认不开放注册。每人只看自己的记录。</p>
   </main>
   <script src="/static/login.js"></script>
 </body>

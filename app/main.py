@@ -52,6 +52,13 @@ async def login_page(request: Request):
     return _html("login.html")
 
 
+def _current_user(request: Request) -> dict:
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    return user
+
+
 @app.get("/api/auth/status")
 async def auth_status(request: Request):
     user = await auth.user_from_request(request)
@@ -60,14 +67,13 @@ async def auth_status(request: Request):
         "username": user["username"] if user else None,
         "needs_setup": (await db.count_users()) == 0,
         "allow_register": ALLOW_REGISTER,
+        "test_accounts": auth.public_seed_accounts(),
     }
 
 
 @app.get("/api/auth/me")
 async def auth_me(request: Request):
-    user = getattr(request.state, "user", None) or await auth.user_from_request(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="未登录")
+    user = _current_user(request)
     return {"username": user["username"], "id": user["id"]}
 
 
@@ -164,21 +170,24 @@ async def index():
 
 
 @app.get("/api/records")
-async def list_records():
-    return {"records": await db.list_records()}
+async def list_records(request: Request):
+    user = _current_user(request)
+    return {"records": await db.list_records(user["id"])}
 
 
 @app.get("/api/records/{record_id}")
-async def get_record(record_id: int):
-    record = await db.get_record(record_id)
+async def get_record(record_id: int, request: Request):
+    user = _current_user(request)
+    record = await db.get_record(record_id, user["id"])
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     return record
 
 
 @app.get("/api/records/{record_id}/file")
-async def download_file(record_id: int):
-    record = await db.get_record(record_id)
+async def download_file(record_id: int, request: Request):
+    user = _current_user(request)
+    record = await db.get_record(record_id, user["id"])
     if not record or not record.get("file_path"):
         raise HTTPException(status_code=404, detail="无附件")
     path = Path(record["file_path"])
@@ -219,12 +228,14 @@ def _build_symptom_payload(
 
 @app.post("/api/journal")
 async def log_symptom(
+    request: Request,
     text: str = Form(...),
     visit_date: str = Form(""),
     region: str = Form("OTHER"),
     tags: str = Form(""),
 ):
     """Save symptom and run LLM basic judgment (rules fallback)."""
+    user = _current_user(request)
     body = text.strip()
     if not body:
         raise HTTPException(status_code=400, detail="内容不能为空")
@@ -232,6 +243,7 @@ async def log_symptom(
     payload = _build_symptom_payload(body, visit_date, region, tags)
     record_id = await db.insert_record(
         {
+            "user_id": user["id"],
             "visit_date": payload["visit_date"],
             "region": payload["region"],
             "record_type": "symptom",
@@ -250,12 +262,14 @@ async def log_symptom(
 
 
 @app.get("/api/journal")
-async def list_journal(limit: int = 50):
-    return {"entries": await db.list_recent_symptoms(limit=limit)}
+async def list_journal(request: Request, limit: int = 50):
+    user = _current_user(request)
+    return {"entries": await db.list_recent_symptoms(user["id"], limit=limit)}
 
 
 @app.post("/api/records")
 async def create_record(
+    request: Request,
     visit_date: str = Form(...),
     region: str = Form(...),
     record_type: str = Form(...),
@@ -265,6 +279,7 @@ async def create_record(
     tags: str = Form(""),
     file: UploadFile | None = File(None),
 ):
+    user = _current_user(request)
     extracted = ""
     file_path = None
     file_name = None
@@ -274,7 +289,7 @@ async def create_record(
         if suffix not in SUPPORTED_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"不支持格式: {suffix}")
         content = await file.read()
-        dest = save_upload(file.filename, content)
+        dest = save_upload(file.filename, content, user_id=user["id"])
         file_path = str(dest)
         file_name = file.filename
         extracted = extract_text(dest)
@@ -286,6 +301,7 @@ async def create_record(
 
     record_id = await db.insert_record(
         {
+            "user_id": user["id"],
             "visit_date": visit_date,
             "region": region,
             "institution": institution.strip() or None,
@@ -304,6 +320,7 @@ async def create_record(
 @app.patch("/api/records/{record_id}")
 async def patch_record(
     record_id: int,
+    request: Request,
     visit_date: str = Form(""),
     region: str = Form(""),
     title: str = Form(""),
@@ -314,7 +331,8 @@ async def patch_record(
     reclassify: str = Form("1"),
 ):
     """Edit an existing record. Symptoms re-run LLM judgment when text changes."""
-    existing = await db.get_record(record_id)
+    user = _current_user(request)
+    existing = await db.get_record(record_id, user["id"])
     if not existing:
         raise HTTPException(status_code=404, detail="记录不存在")
 
@@ -367,16 +385,17 @@ async def patch_record(
         if notes.strip() and not existing.get("file_path"):
             fields["extracted_text"] = notes.strip()
 
-    ok = await db.update_record(record_id, fields)
+    ok = await db.update_record(record_id, user["id"], fields)
     if not ok:
         raise HTTPException(status_code=404, detail="记录不存在")
-    record = await db.get_record(record_id)
+    record = await db.get_record(record_id, user["id"])
     return {"record": record, "classification": classification}
 
 
 @app.delete("/api/records/{record_id}")
-async def remove_record(record_id: int):
-    deleted = await db.delete_record(record_id)
+async def remove_record(record_id: int, request: Request):
+    user = _current_user(request)
+    deleted = await db.delete_record(record_id, user["id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="记录不存在")
     file_path = deleted.get("file_path")
@@ -391,9 +410,10 @@ async def remove_record(record_id: int):
 
 
 @app.post("/api/analyze/summary")
-async def analyze_once():
+async def analyze_once(request: Request):
     """One-shot full analysis: recent symptoms + medical records → LLM → JSON to web."""
-    records = await db.get_full_analysis_context()
+    user = _current_user(request)
+    records = await db.get_full_analysis_context(user["id"])
     if not records:
         raise HTTPException(status_code=400, detail="还没有任何记录，先记一条症状")
     answer = analyze_summary(records)
@@ -413,11 +433,12 @@ async def analyze_once():
 
 
 @app.post("/api/ask")
-async def ask(question: str = Form(...)):
+async def ask(request: Request, question: str = Form(...)):
+    user = _current_user(request)
     question = question.strip()
     if not question:
         raise HTTPException(status_code=400, detail="问题不能为空")
-    records = await db.get_context_for_ask(question)
+    records = await db.get_context_for_ask(user["id"], question)
     answer = ask_llm(question, records)
     return {
         "answer": answer,

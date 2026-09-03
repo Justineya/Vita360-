@@ -1,6 +1,5 @@
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import aiosqlite
@@ -22,7 +21,8 @@ CREATE TABLE IF NOT EXISTS records (
     extracted_text TEXT,
     notes TEXT,
     metadata_json TEXT,
-    tags TEXT
+    tags TEXT,
+    user_id INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_visit_date ON records(visit_date DESC);
@@ -56,18 +56,27 @@ async def init_db() -> None:
     RECORDS_DIR.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(SCHEMA)
+        cursor = await db.execute("PRAGMA table_info(records)")
+        cols = {row[1] for row in await cursor.fetchall()}
+        if "user_id" not in cols:
+            await db.execute("ALTER TABLE records ADD COLUMN user_id INTEGER")
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_records_user ON records(user_id)"
+        )
         await db.commit()
 
 
 async def insert_record(row: dict[str, Any]) -> int:
+    if row.get("user_id") is None:
+        raise ValueError("user_id is required")
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
             """
             INSERT INTO records (
                 created_at, visit_date, region, institution, record_type,
                 title, file_name, file_path, extracted_text, notes,
-                metadata_json, tags
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                metadata_json, tags, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 row.get("created_at", _now_iso()),
@@ -82,6 +91,7 @@ async def insert_record(row: dict[str, Any]) -> int:
                 row.get("notes"),
                 json.dumps(row.get("metadata") or {}, ensure_ascii=False),
                 row.get("tags"),
+                row["user_id"],
             ),
         )
         await db.commit()
@@ -115,38 +125,42 @@ def _attach_classification(row: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-async def list_records(limit: int = 200) -> list[dict[str, Any]]:
+async def list_records(user_id: int, limit: int = 200) -> list[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """
             SELECT id, created_at, visit_date, region, institution,
-                   record_type, title, file_name, notes, tags,
+                   record_type, title, file_name, notes, tags, user_id,
                    metadata_json,
                    substr(extracted_text, 1, 300) AS text_preview
             FROM records
+            WHERE user_id = ?
             ORDER BY visit_date DESC, id DESC
             LIMIT ?
             """,
-            (limit,),
+            (user_id, limit),
         )
         rows = await cursor.fetchall()
         return [_attach_classification(dict(row)) for row in rows]
 
 
-async def get_record(record_id: int) -> dict[str, Any] | None:
+async def get_record(record_id: int, user_id: int) -> dict[str, Any] | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        cursor = await db.execute("SELECT * FROM records WHERE id = ?", (record_id,))
+        cursor = await db.execute(
+            "SELECT * FROM records WHERE id = ? AND user_id = ?",
+            (record_id, user_id),
+        )
         row = await cursor.fetchone()
         if not row:
             return None
         return _attach_classification(dict(row))
 
 
-async def update_record(record_id: int, fields: dict[str, Any]) -> bool:
-    """Update allowed columns. Returns False if record missing."""
-    if await get_record(record_id) is None:
+async def update_record(record_id: int, user_id: int, fields: dict[str, Any]) -> bool:
+    """Update allowed columns. Returns False if record missing or not owned."""
+    if await get_record(record_id, user_id) is None:
         return False
     allowed = {
         "visit_date",
@@ -172,52 +186,56 @@ async def update_record(record_id: int, fields: dict[str, Any]) -> bool:
         else:
             cols.append(f"{key} = ?")
             params.append(value)
-    params.append(record_id)
+    params.extend([record_id, user_id])
 
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            f"UPDATE records SET {', '.join(cols)} WHERE id = ?",
+            f"UPDATE records SET {', '.join(cols)} WHERE id = ? AND user_id = ?",
             params,
         )
         await db.commit()
         return True
 
 
-async def delete_record(record_id: int) -> dict[str, Any] | None:
+async def delete_record(record_id: int, user_id: int) -> dict[str, Any] | None:
     """Delete a record and return the deleted row (for file cleanup)."""
-    existing = await get_record(record_id)
+    existing = await get_record(record_id, user_id)
     if not existing:
         return None
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM records WHERE id = ?", (record_id,))
+        await db.execute(
+            "DELETE FROM records WHERE id = ? AND user_id = ?",
+            (record_id, user_id),
+        )
         await db.commit()
     return existing
 
 
-async def list_recent_medical(limit: int = 15) -> list[dict[str, Any]]:
+async def list_recent_medical(user_id: int, limit: int = 15) -> list[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """
             SELECT id, visit_date, region, institution, record_type,
-                   title, extracted_text, notes, tags
+                   title, extracted_text, notes, tags, user_id
             FROM records
-            WHERE record_type != 'symptom'
+            WHERE user_id = ? AND record_type != 'symptom'
             ORDER BY visit_date DESC, id DESC
             LIMIT ?
             """,
-            (limit,),
+            (user_id, limit),
         )
         return [dict(row) for row in await cursor.fetchall()]
 
 
 async def get_full_analysis_context(
+    user_id: int,
     symptom_limit: int = 40,
     medical_limit: int = 15,
 ) -> list[dict[str, Any]]:
     """All recent material for one-shot comprehensive analysis."""
-    symptoms = await list_recent_symptoms(limit=symptom_limit)
-    medical = await list_recent_medical(limit=medical_limit)
+    symptoms = await list_recent_symptoms(user_id, limit=symptom_limit)
+    medical = await list_recent_medical(user_id, limit=medical_limit)
     merged = symptoms + medical
     seen: set[int] = set()
     unique: list[dict[str, Any]] = []
@@ -230,19 +248,19 @@ async def get_full_analysis_context(
     return unique
 
 
-async def list_recent_symptoms(limit: int = 30) -> list[dict[str, Any]]:
+async def list_recent_symptoms(user_id: int, limit: int = 30) -> list[dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
             """
             SELECT id, visit_date, region, institution, record_type,
-                   title, extracted_text, notes, tags
+                   title, extracted_text, notes, tags, user_id
             FROM records
-            WHERE record_type = 'symptom'
+            WHERE user_id = ? AND record_type = 'symptom'
             ORDER BY visit_date DESC, id DESC
             LIMIT ?
             """,
-            (limit,),
+            (user_id, limit),
         )
         return [dict(row) for row in await cursor.fetchall()]
 
@@ -255,14 +273,14 @@ def _is_synthesis_question(query: str) -> bool:
     return any(h in query for h in hints)
 
 
-async def get_context_for_ask(query: str, limit: int = 25) -> list[dict[str, Any]]:
+async def get_context_for_ask(user_id: int, query: str, limit: int = 25) -> list[dict[str, Any]]:
     """Merge keyword hits with recent symptom diary for cross-entry synthesis."""
-    hits = await search_records(query, limit=12)
+    hits = await search_records(user_id, query, limit=12)
     seen = {r["id"] for r in hits}
     merged = list(hits)
 
     if _is_synthesis_question(query) or len(hits) < 3:
-        for row in await list_recent_symptoms(limit=30):
+        for row in await list_recent_symptoms(user_id, limit=30):
             if row["id"] not in seen:
                 merged.append(row)
                 seen.add(row["id"])
@@ -271,11 +289,10 @@ async def get_context_for_ask(query: str, limit: int = 25) -> list[dict[str, Any
     return merged[:limit]
 
 
-async def search_records(query: str, limit: int = 8) -> list[dict[str, Any]]:
+async def search_records(user_id: int, query: str, limit: int = 8) -> list[dict[str, Any]]:
     """Simple keyword search for RAG context."""
     raw = query.strip()
     terms = [t.strip() for t in raw.replace("，", " ").split() if t.strip()]
-    # Also try stripping common question suffixes for Chinese queries
     for suffix in ("怎么样", "如何", "多少", "是什么", "有没有", "吗", "呢"):
         if raw.endswith(suffix) and len(raw) > len(suffix) + 1:
             terms.append(raw[: -len(suffix)])
@@ -288,17 +305,18 @@ async def search_records(query: str, limit: int = 8) -> list[dict[str, Any]]:
             cursor = await db.execute(
                 """
                 SELECT id, visit_date, region, institution, record_type,
-                       title, extracted_text, notes
+                       title, extracted_text, notes, user_id
                 FROM records
+                WHERE user_id = ?
                 ORDER BY visit_date DESC
                 LIMIT ?
                 """,
-                (limit,),
+                (user_id, limit),
             )
             return [dict(row) for row in await cursor.fetchall()]
 
     clauses = []
-    params: list[Any] = []
+    params: list[Any] = [user_id]
     for term in terms[:6]:
         like = f"%{term}%"
         clauses.append(
@@ -309,9 +327,9 @@ async def search_records(query: str, limit: int = 8) -> list[dict[str, Any]]:
     where = " OR ".join(clauses)
     sql = f"""
         SELECT id, visit_date, region, institution, record_type,
-               title, extracted_text, notes
+               title, extracted_text, notes, user_id
         FROM records
-        WHERE {where}
+        WHERE user_id = ? AND ({where})
         ORDER BY visit_date DESC
         LIMIT ?
     """
@@ -321,6 +339,17 @@ async def search_records(query: str, limit: int = 8) -> list[dict[str, Any]]:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(sql, params)
         return [dict(row) for row in await cursor.fetchall()]
+
+
+async def assign_orphan_records(user_id: int) -> int:
+    """Attach legacy rows with NULL user_id to a user (usually admin)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "UPDATE records SET user_id = ? WHERE user_id IS NULL",
+            (user_id,),
+        )
+        await db.commit()
+        return cursor.rowcount or 0
 
 
 async def count_users() -> int:

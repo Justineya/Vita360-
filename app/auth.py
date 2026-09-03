@@ -161,15 +161,58 @@ def auth_required_response(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
+def parse_seed_accounts() -> list[tuple[str, str]]:
+    """Parse SEED_ACCOUNTS plus the primary SEED_USERNAME/PASSWORD."""
+    pairs: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(username: str, password: str) -> None:
+        key = username.strip().lower()
+        if not key or key in seen:
+            return
+        seen.add(key)
+        pairs.append((username.strip(), password))
+
+    add(app_config.SEED_USERNAME, app_config.SEED_PASSWORD)
+    raw = (app_config.SEED_ACCOUNTS or "").strip()
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk or ":" not in chunk:
+            continue
+        username, password = chunk.split(":", 1)
+        add(username, password)
+    return pairs
+
+
 async def ensure_seed_user() -> None:
-    """Create/sync the default admin account so first visit is login, not setup."""
+    """Create/sync demo accounts so first visit is login, not setup."""
     if not app_config.SEED_ON_START:
         return
-    username = validate_username(app_config.SEED_USERNAME)
-    password = validate_password(app_config.SEED_PASSWORD)
-    password_hash = await hash_password(password)
-    existing = await db.get_user_by_username(username)
-    if existing:
-        await db.update_user_password(existing["id"], password_hash)
-        return
-    await db.create_user(username, password_hash)
+
+    admin_id: int | None = None
+    for username_raw, password_raw in parse_seed_accounts():
+        username = validate_username(username_raw)
+        password = validate_password(password_raw)
+        password_hash = await hash_password(password)
+        existing = await db.get_user_by_username(username)
+        if existing:
+            await db.update_user_password(existing["id"], password_hash)
+            user_id = existing["id"]
+        else:
+            created = await db.create_user(username, password_hash)
+            user_id = created["id"]
+        if username.lower() == "admin" or admin_id is None:
+            admin_id = user_id
+
+    if admin_id is not None:
+        await db.assign_orphan_records(admin_id)
+
+
+def public_seed_accounts() -> list[dict[str, str]]:
+    """Usernames/passwords for the login page hint (only when seeding is on)."""
+    if not app_config.SEED_ON_START:
+        return []
+    return [
+        {"username": u, "password": p}
+        for u, p in parse_seed_accounts()
+    ]
