@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import auth, db
 from app.classify import classification_tags
+from app import config as app_config
 from app.config import ALLOW_REGISTER, HOST, PORT, ROOT
 from app.ingest import SUPPORTED_EXTENSIONS, extract_text, save_upload
 from app.journal import symptom_title, today_str
@@ -20,6 +21,8 @@ STATIC_DIR = ROOT / "app" / "static"
 async def lifespan(_: FastAPI):
     await db.init_db()
     await db.prune_expired_sessions()
+    if app_config.SEED_ON_START:
+        await auth.ensure_seed_user()
     yield
 
 

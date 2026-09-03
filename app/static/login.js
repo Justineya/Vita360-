@@ -9,7 +9,7 @@ function modeUI(mode, allowRegister) {
   document.getElementById("auth-title").textContent = setup ? "创建账号" : "登录";
   document.getElementById("auth-lead").textContent = setup
     ? "第一次使用，先设一个只有你知道的账号和密码。以后放到网上，别人没有这对账号密码就进不来。"
-    : "输入账号和密码进入档案。以后放到网上，也是这一页。";
+    : "输入账号和密码进入档案。";
   document.getElementById("auth-submit").textContent = setup ? "创建并进入" : "进入档案";
   document.getElementById("password").autocomplete = setup ? "new-password" : "current-password";
   const wrap = document.getElementById("password2-wrap");

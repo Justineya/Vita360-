@@ -365,6 +365,15 @@ async def get_user_by_id(user_id: int) -> dict[str, Any] | None:
         return dict(row) if row else None
 
 
+async def update_user_password(user_id: int, password_hash: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, user_id),
+        )
+        await db.commit()
+
+
 async def create_session(token_hash: str, user_id: int, expires_at: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(

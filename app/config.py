@@ -26,3 +26,13 @@ ALLOW_REGISTER = os.getenv("ALLOW_REGISTER", "0").strip().lower() in {
     "yes",
     "on",
 }
+
+# Bootstrap login (skip first-run create-account). Change these before a real public launch.
+SEED_ON_START = os.getenv("SEED_ON_START", "1").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SEED_USERNAME = os.getenv("SEED_USERNAME", "admin").strip() or "admin"
+SEED_PASSWORD = os.getenv("SEED_PASSWORD", "admin")

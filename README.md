@@ -33,7 +33,7 @@ python -m app.main
 ```
 
 浏览器打开：<http://127.0.0.1:8765>  
-第一次会进入**创建账号**页；之后用这对账号密码登录。密码只存在本机数据库，不会发给大模型。
+默认账号 **`admin` / `admin`**（启动时自动准备，不用再创建）。密码只存在本机数据库，不会发给大模型。上线给别人用之前请改掉 `.env` 里的 `SEED_PASSWORD`。
 
 或使用一键脚本：
 
@@ -85,9 +85,21 @@ bash scripts/setup.sh
 这套登录就是给上线用的，不必换成 Basic Auth。
 
 1. 服务器用 HTTPS（登录 Cookie 会自动带 `Secure`）
-2. `.env` 里 `HOST=0.0.0.0`，用 Railway / Fly / 轻量 VPS 跑 `python -m app.main`
-3. 保持 `ALLOW_REGISTER=0`（默认）：只有你第一次创建的那个账号能进
-4. 需要再开一个账号时，临时设 `ALLOW_REGISTER=1` 创建完再关掉
+2. `.env` 里 `HOST=0.0.0.0`，用 Railway / Fly / 轻量 VPS / Docker 跑
+3. 改掉默认密码：`SEED_USERNAME` / `SEED_PASSWORD`
+4. 保持 `ALLOW_REGISTER=0`（默认不开放注册）
+
+Docker 示例：
+
+```bash
+docker build -t vita360 .
+docker run --rm -p 8765:8765 --env-file .env -v "$PWD/data:/app/data" vita360
+```
+
+临时公网调试也可用 Cloudflare Tunnel：`cloudflared tunnel --url http://127.0.0.1:8765`  
+（会得到一个 `*.trycloudflare.com` 地址；关掉隧道或机器后失效。）
+
+固定自己的域名：在 Cloudflare / 域名商解析到你的服务器，或给 Tunnel 绑定自定义域名。
 
 家庭多人、各自只看自己的数据，仍见 Phase 3 的 Supabase 方案。
 

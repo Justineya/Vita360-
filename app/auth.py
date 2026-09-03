@@ -15,11 +15,12 @@ import bcrypt
 from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from app import config as app_config
 from app import db
 from app.config import ALLOW_REGISTER, COOKIE_NAME, COOKIE_SECURE, SESSION_DAYS
 
 USERNAME_RE = re.compile(r"^[\w.@+\u4e00-\u9fff-]{2,64}$", re.UNICODE)
-MIN_PASSWORD = 8
+MIN_PASSWORD = 5
 MAX_PASSWORD = 72  # bcrypt limit
 SESSION_BYTES = 32
 
@@ -158,3 +159,17 @@ def auth_required_response(request: Request):
     if request.url.path.startswith("/api/"):
         return JSONResponse({"detail": "未登录"}, status_code=401)
     return RedirectResponse("/login", status_code=303)
+
+
+async def ensure_seed_user() -> None:
+    """Create/sync the default admin account so first visit is login, not setup."""
+    if not app_config.SEED_ON_START:
+        return
+    username = validate_username(app_config.SEED_USERNAME)
+    password = validate_password(app_config.SEED_PASSWORD)
+    password_hash = await hash_password(password)
+    existing = await db.get_user_by_username(username)
+    if existing:
+        await db.update_user_password(existing["id"], password_hash)
+        return
+    await db.create_user(username, password_hash)
