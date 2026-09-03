@@ -61,10 +61,11 @@ CATEGORIES: list[dict[str, Any]] = [
     },
     {
         "id": "ent",
-        "label": "耳鼻喉",
+        "label": "口腔/耳鼻喉",
         "keywords": [
             "嗓子", "咽痛", "扁桃", "鼻涕", "鼻炎", "耳痛", "听力", "声嘶",
-            "口腔溃疡", "牙痛",
+            "口腔溃疡", "口疮", "口腔", "舌下", "舌头", "舌尖", "牙龈",
+            "口周", "口角", "嘴巴", "嘴里", "牙痛", "阿弗他", "溃疡",
         ],
     },
     {
@@ -120,6 +121,11 @@ SUSPECTED_RULES: list[tuple[tuple[str, ...], str]] = [
     (("喉咙痛",), "疑似咽喉炎症相关"),
     (("咽痛",), "疑似咽喉炎症相关"),
     (("皮疹", "痒"), "疑似过敏/皮炎相关"),
+    (("舌下", "溃疡"), "疑似口腔溃疡相关"),
+    (("口腔", "溃疡"), "疑似口腔溃疡相关"),
+    (("口疮",), "疑似口腔溃疡相关"),
+    (("阿弗他",), "疑似阿弗他溃疡相关"),
+    (("口周", "红"), "疑似口周皮肤刺激/皮炎相关"),
     (("尿频", "尿痛"), "疑似尿路刺激相关"),
     (("发热", "咳"), "疑似感染征象"),
     (("走路", "胀"), "疑似胀气（活动后可缓）"),
@@ -130,6 +136,46 @@ SUSPECTED_RULES: list[tuple[tuple[str, ...], str]] = [
 
 def _score_category(text: str, keywords: list[str]) -> int:
     return sum(1 for kw in keywords if kw in text)
+
+
+# Oral cavity is anatomically part of the GI tract, but for journaling we keep
+# tongue/mouth ulcers under 口腔/耳鼻喉 — not 消化/胃肠.
+ORAL_HINTS = (
+    "舌下", "舌头", "舌尖", "口腔", "口疮", "口周", "口角", "溃疡",
+    "嘴巴", "嘴里", "牙龈", "牙痛", "阿弗他", "口腔溃疡",
+)
+GI_BODY_HINTS = (
+    "胃", "腹", "肚", "肠", "打嗝", "嗳气", "反酸", "烧心", "腹泻",
+    "拉肚子", "便秘", "上腹", "下腹", "胀气", "反胃", "便血", "黑便",
+)
+
+
+def refine_classification(text: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Fix common misfires: mouth/tongue → oral, not digestive."""
+    data = dict(result or {})
+    raw = text or ""
+    oral_hits = sum(1 for k in ORAL_HINTS if k in raw)
+    gi_hits = sum(1 for k in GI_BODY_HINTS if k in raw)
+    primary = str(data.get("primary") or "")
+    primary_id = str(data.get("primary_id") or "")
+
+    if primary in {"耳鼻喉", "口腔"} or primary_id == "ent":
+        data["primary"] = "口腔/耳鼻喉"
+        data["primary_id"] = "ent"
+
+    looks_gi = primary_id == "gi" or "消化" in primary or "胃肠" in primary
+    if oral_hits and gi_hits == 0 and looks_gi:
+        data["primary"] = "口腔/耳鼻喉"
+        data["primary_id"] = "ent"
+        cats = [
+            c
+            for c in (data.get("categories") or [])
+            if isinstance(c, dict) and c.get("id") != "ent"
+        ]
+        data["categories"] = [{"id": "ent", "label": "口腔/耳鼻喉"}] + cats[:2]
+        data["refined"] = "oral_not_gi"
+
+    return data
 
 
 def classify_symptom(text: str) -> dict[str, Any]:
@@ -177,20 +223,23 @@ def classify_symptom(text: str) -> dict[str, Any]:
     if not suspected and categories:
         suspected.append(f"倾向归入「{primary}」类症状（规则匹配）")
 
-    return {
-        "primary": primary,
-        "primary_id": primary_id,
-        "categories": categories,
-        "suspected": suspected,
-        "summary": (
-            f"规则归类为「{primary}」。"
-            if primary != "未分类"
-            else "暂无法归入明确系统，可再补充细节。"
-        ),
-        "advice": "若持续、加重或出现报警症状，应就医面诊；此处不是诊断。",
-        "method": "rules",
-        "disclaimer": "规则自动归类，供检索与整理；不构成诊断或就医建议。",
-    }
+    return refine_classification(
+        raw,
+        {
+            "primary": primary,
+            "primary_id": primary_id,
+            "categories": categories,
+            "suspected": suspected,
+            "summary": (
+                f"规则归类为「{primary}」。"
+                if primary != "未分类"
+                else "暂无法归入明确系统，可再补充细节。"
+            ),
+            "advice": "若持续、加重或出现报警症状，应就医面诊；此处不是诊断。",
+            "method": "rules",
+            "disclaimer": "规则自动归类，供检索与整理；不构成诊断或就医建议。",
+        },
+    )
 
 
 def classification_tags(result: dict[str, Any]) -> str:

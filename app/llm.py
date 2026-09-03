@@ -4,7 +4,7 @@ from typing import Any
 
 from openai import OpenAI
 
-from app.classify import classify_symptom
+from app.classify import classify_symptom, refine_classification
 from app.config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
 
 SYSTEM_PROMPT = """你是个人健康档案助手，根据用户自己的「症状日记」和「就医/化验记录」回答问题。
@@ -22,12 +22,18 @@ JUDGE_SYSTEM = """你是个人健康日记的归档助手。用户刚写了一�
 
 只输出一个 JSON 对象，不要 markdown 代码块，不要其它说明。字段：
 {
-  "primary": "系统分类，从下列选一个最贴切：消化/胃肠、呼吸、心血管、神经/头面、骨骼肌肉、皮肤、耳鼻喉、泌尿、睡眠/情绪、全身/感染征象、未分类",
+  "primary": "系统分类，从下列选一个最贴切：消化/胃肠、呼吸、心血管、神经/头面、骨骼肌肉、皮肤、口腔/耳鼻喉、泌尿、睡眠/情绪、全身/感染征象、未分类",
   "categories": [{"id":"gi|resp|cardio|neuro|msk|skin|ent|uro|sleep_mood|general|other","label":"中文标签"}],
   "suspected": ["1-3条谨慎的疑似提示，须以「疑似」开头"],
   "summary": "一句话基本判断（客观复述倾向，勿确诊）",
   "advice": "一句观察建议（如持续/加重应就医；勿开药）"
 }
+
+分类指引（必须遵守）：
+1. 舌、舌下、口腔溃疡、口疮、牙龈、口周红肿/长痘 → primary 选「口腔/耳鼻喉」（categories id 用 ent）。
+2. 不要因为「口腔属于消化道起点」就把口腔/舌的问题归到「消化/胃肠」。
+3. 「消化/胃肠」只用于胃、腹、肠、反酸、打嗝、腹泻、便秘等腹部消化道症状。
+4. 口周皮肤可放进 categories 次要项，但主要不适在口腔/舌时 primary 仍是「口腔/耳鼻喉」。
 """
 
 
@@ -174,7 +180,7 @@ def judge_symptom(text: str) -> dict[str, Any]:
         )
         parsed = _parse_judge_json(response.choices[0].message.content or "")
         if parsed:
-            return parsed
+            return refine_classification(text, parsed)
     except Exception as exc:  # noqa: BLE001 — keep journaling usable offline
         fallback["summary"] = f"规则归类为「{fallback['primary']}」（模型调用失败：{type(exc).__name__}）。"
         fallback["method"] = "rules_fallback"
