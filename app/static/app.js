@@ -11,7 +11,7 @@ const regionLabel = { HK: "香港", SZ: "深圳", OTHER: "其他" };
 
 const FLOW_HINTS = {
   write: "今天先记一条就够了。看病程、做分析是后一步；报告只在有化验单时再补。",
-  timeline: "这里回看整段病程。点条目看全文；筛「仅症状」或「仅检查」更清楚。",
+  timeline: "日历上有圆点的日子有记录。默认看本月；点一天只看那天，避免越记越乱。",
   analyze: "有几条症状后再分析更有用。一键综述适合复诊前整理。",
   archive: "这是附录，不是每天要做的事。有纸质/PDF 报告时再来归档。",
 };
@@ -21,6 +21,13 @@ let activeFilter = "all";
 let currentView = "write";
 let currentRecord = null;
 let deleteArmed = false;
+/** @type {"month"|"all"|"day"} */
+let listScope = "month";
+let selectedDate = null;
+let calCursor = (() => {
+  const t = new Date();
+  return { year: t.getFullYear(), month: t.getMonth() }; // month 0-11
+})();
 
 const _fetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -33,7 +40,8 @@ window.fetch = async (input, init) => {
 };
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function escapeHtml(s) {
@@ -80,8 +88,142 @@ function showView(name) {
   });
   document.getElementById("flow-hint").textContent = FLOW_HINTS[name] || "";
   if (name === "analyze") updateAnalyzeGate();
-  if (name === "timeline") renderTimeline(allRecords);
+  if (name === "timeline") {
+    syncCalendarToRecords();
+    renderTimelineView();
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toISODate(y, m0, d) {
+  return `${y}-${pad2(m0 + 1)}-${pad2(d)}`;
+}
+
+function monthKey(y, m0) {
+  return `${y}-${pad2(m0 + 1)}`;
+}
+
+function countsByDate(records) {
+  const map = new Map();
+  for (const r of records) {
+    if (!r.visit_date) continue;
+    map.set(r.visit_date, (map.get(r.visit_date) || 0) + 1);
+  }
+  return map;
+}
+
+function syncCalendarToRecords() {
+  if (selectedDate) {
+    const [y, m] = selectedDate.split("-").map(Number);
+    if (y && m) {
+      calCursor = { year: y, month: m - 1 };
+      return;
+    }
+  }
+  const latest = allRecords.map((r) => r.visit_date).filter(Boolean).sort().at(-1);
+  if (latest) {
+    const [y, m] = latest.split("-").map(Number);
+    calCursor = { year: y, month: m - 1 };
+  }
+}
+
+function setListScope(scope) {
+  listScope = scope;
+  if (scope !== "day") selectedDate = null;
+  document.getElementById("scope-month").classList.toggle("active", scope === "month" || scope === "day");
+  document.getElementById("scope-all").classList.toggle("active", scope === "all");
+  document.getElementById("cal-clear-day").hidden = scope !== "day";
+  renderTimelineView();
+}
+
+function updateScopeLabel(visibleCount) {
+  const el = document.getElementById("list-scope-label");
+  if (listScope === "day" && selectedDate) {
+    el.textContent = `${formatDate(selectedDate)} · ${visibleCount} 条`;
+  } else if (listScope === "month") {
+    el.textContent = `${calCursor.year}年${calCursor.month + 1}月 · ${visibleCount} 条`;
+  } else {
+    el.textContent = `全部 · ${visibleCount} 条`;
+  }
+}
+
+function renderCalendar() {
+  const title = document.getElementById("cal-title");
+  const grid = document.getElementById("cal-grid");
+  const hint = document.getElementById("cal-hint");
+  const { year, month } = calCursor;
+  title.textContent = `${year}年${month + 1}月`;
+
+  const typed = allRecords.filter(matchesFilter);
+  const counts = countsByDate(typed);
+  const today = todayISO();
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) {
+    const d = prevDays - firstDow + 1 + i;
+    const prev = month === 0 ? { y: year - 1, m: 11 } : { y: year, m: month - 1 };
+    const iso = toISODate(prev.y, prev.m, d);
+    cells.push({ day: d, iso, muted: true });
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push({ day: d, iso: toISODate(year, month, d), muted: false });
+  }
+  let nextDay = 1;
+  const next = month === 11 ? { y: year + 1, m: 0 } : { y: year, m: month + 1 };
+  while (cells.length % 7 !== 0) {
+    cells.push({ day: nextDay, iso: toISODate(next.y, next.m, nextDay), muted: true });
+    nextDay += 1;
+  }
+
+  let monthHits = 0;
+  for (const [iso, n] of counts) {
+    if (iso.startsWith(monthKey(year, month))) monthHits += n;
+  }
+
+  grid.innerHTML = cells
+    .map(({ day, iso, muted }) => {
+      const n = counts.get(iso) || 0;
+      const cls = [
+        "cal-cell",
+        muted ? "muted" : "",
+        iso === today ? "today" : "",
+        iso === selectedDate ? "selected" : "",
+        n ? "has-records" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const count = n > 1 ? `<span class="count">${n}</span>` : "";
+      return `<button type="button" class="${cls}" data-date="${iso}" aria-label="${iso}${n ? `，${n}条记录` : ""}">${day}${count}</button>`;
+    })
+    .join("");
+
+  hint.textContent =
+    monthHits > 0
+      ? `本月有记录 ${monthHits} 条。点有圆点的日子，只看那天。`
+      : "本月还没有记录。切换月份，或点「看全部」。";
+}
+
+function visibleRecords(records) {
+  return records.filter((r) => {
+    if (!matchesFilter(r)) return false;
+    if (listScope === "day") return r.visit_date === selectedDate;
+    if (listScope === "month") {
+      return (r.visit_date || "").startsWith(monthKey(calCursor.year, calCursor.month));
+    }
+    return true;
+  });
+}
+
+function renderTimelineView() {
+  renderCalendar();
+  renderTimeline(allRecords);
 }
 
 function updateStats(records) {
@@ -190,14 +332,21 @@ function renderRecent(records) {
 
 function renderTimeline(records) {
   const list = document.getElementById("timeline");
-  const filtered = records.filter(matchesFilter);
+  const filtered = visibleRecords(records);
+  updateScopeLabel(filtered.length);
 
   if (!records.length) {
     list.innerHTML = `<li class="empty">尚无记录。回到「记症状」写下第一条。</li>`;
     return;
   }
   if (!filtered.length) {
-    list.innerHTML = `<li class="empty">当前筛选下暂无条目。</li>`;
+    const emptyMsg =
+      listScope === "day" && selectedDate
+        ? `${formatDate(selectedDate)} 还没有记录。换一天，或点「看本月」。`
+        : listScope === "month"
+          ? "这个月没有符合筛选的记录。可切换月份，或点「看全部」。"
+          : "当前筛选下暂无条目。";
+    list.innerHTML = `<li class="empty">${emptyMsg}</li>`;
     return;
   }
 
@@ -210,7 +359,7 @@ function renderTimeline(records) {
 
   const html = [];
   for (const [date, items] of grouped) {
-    html.push(`<li class="day-label">${escapeHtml(formatDate(date))}</li>`);
+    html.push(`<li class="day-label" id="day-${date}">${escapeHtml(formatDate(date))} · ${items.length} 条</li>`);
     for (const r of items) {
       const isSymptom = r.record_type === "symptom";
       const kind = typeLabel[r.record_type] || r.record_type;
@@ -239,7 +388,10 @@ async function loadTimeline() {
   allRecords = data.records || [];
   updateStats(allRecords);
   renderRecent(allRecords);
-  if (currentView === "timeline") renderTimeline(allRecords);
+  if (currentView === "timeline") {
+    if (!selectedDate) syncCalendarToRecords();
+    renderTimelineView();
+  }
 }
 
 function fillDrawer(record) {
@@ -441,9 +593,66 @@ document.querySelectorAll(".pill[data-filter]").forEach((btn) => {
   btn.addEventListener("click", () => {
     activeFilter = btn.dataset.filter;
     document.querySelectorAll(".pill[data-filter]").forEach((p) => p.classList.toggle("active", p === btn));
-    renderTimeline(allRecords);
+    renderTimelineView();
   });
 });
+
+document.getElementById("cal-prev").addEventListener("click", () => {
+  if (calCursor.month === 0) {
+    calCursor = { year: calCursor.year - 1, month: 11 };
+  } else {
+    calCursor = { year: calCursor.year, month: calCursor.month - 1 };
+  }
+  if (listScope === "day") {
+    selectedDate = null;
+    listScope = "month";
+    document.getElementById("cal-clear-day").hidden = true;
+    document.getElementById("scope-month").classList.add("active");
+    document.getElementById("scope-all").classList.remove("active");
+  }
+  renderTimelineView();
+});
+
+document.getElementById("cal-next").addEventListener("click", () => {
+  if (calCursor.month === 11) {
+    calCursor = { year: calCursor.year + 1, month: 0 };
+  } else {
+    calCursor = { year: calCursor.year, month: calCursor.month + 1 };
+  }
+  if (listScope === "day") {
+    selectedDate = null;
+    listScope = "month";
+    document.getElementById("cal-clear-day").hidden = true;
+    document.getElementById("scope-month").classList.add("active");
+    document.getElementById("scope-all").classList.remove("active");
+  }
+  renderTimelineView();
+});
+
+document.getElementById("cal-grid").addEventListener("click", (e) => {
+  const cell = e.target.closest(".cal-cell[data-date]");
+  if (!cell) return;
+  const iso = cell.dataset.date;
+  const [y, m] = iso.split("-").map(Number);
+  // Clicking a day in adjacent month moves the cursor there
+  if (y !== calCursor.year || m - 1 !== calCursor.month) {
+    calCursor = { year: y, month: m - 1 };
+  }
+  if (listScope === "day" && selectedDate === iso) {
+    setListScope("month");
+    return;
+  }
+  selectedDate = iso;
+  listScope = "day";
+  document.getElementById("scope-month").classList.add("active");
+  document.getElementById("scope-all").classList.remove("active");
+  document.getElementById("cal-clear-day").hidden = false;
+  renderTimelineView();
+});
+
+document.getElementById("scope-month").addEventListener("click", () => setListScope("month"));
+document.getElementById("scope-all").addEventListener("click", () => setListScope("all"));
+document.getElementById("cal-clear-day").addEventListener("click", () => setListScope("month"));
 
 document.getElementById("timeline").addEventListener("click", (e) => {
   const item = e.target.closest(".entry[data-id]");

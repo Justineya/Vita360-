@@ -92,21 +92,44 @@
         <header class="stage-head">
           <p class="step">第 2 步 · 回顾</p>
           <h1 id="timeline-title">病程时间轴</h1>
-          <p>按日期回看已记症状与检查材料。点一条可看全文、编辑或删除。</p>
+          <p>用日历按天回看。记录多了也不堆在一起：默认看当月，点有圆点的日子只看那天。</p>
         </header>
 
-        <div class="toolbar">
-          <div class="filter-pills" role="tablist" aria-label="筛选">
-            <button type="button" class="pill active" data-filter="all">全部</button>
-            <button type="button" class="pill" data-filter="symptom">仅症状</button>
-            <button type="button" class="pill" data-filter="medical">仅检查</button>
-          </div>
-          <div class="toolbar-right">
-            <span class="muted">检查 <b id="stat-reports">0</b> · 跨度 <b id="stat-span">—</b></span>
-            <button type="button" id="refresh-btn" class="btn-ghost">刷新</button>
+        <div class="timeline-layout">
+          <aside class="cal-panel" aria-label="病程日历">
+            <div class="cal-head">
+              <button type="button" id="cal-prev" class="btn-ghost" aria-label="上个月">‹</button>
+              <h2 id="cal-title">—</h2>
+              <button type="button" id="cal-next" class="btn-ghost" aria-label="下个月">›</button>
+            </div>
+            <div class="cal-weekdays" aria-hidden="true">
+              <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+            </div>
+            <div id="cal-grid" class="cal-grid" role="grid" aria-labelledby="cal-title"></div>
+            <p class="cal-hint" id="cal-hint">圆点表示当天有记录。</p>
+            <div class="cal-actions">
+              <button type="button" class="pill active" id="scope-month">看本月</button>
+              <button type="button" class="pill" id="scope-all">看全部</button>
+              <button type="button" class="linkish" id="cal-clear-day" hidden>取消单日筛选</button>
+            </div>
+          </aside>
+
+          <div class="timeline-main">
+            <div class="toolbar">
+              <div class="filter-pills" role="tablist" aria-label="类型筛选">
+                <button type="button" class="pill active" data-filter="all">全部类型</button>
+                <button type="button" class="pill" data-filter="symptom">仅症状</button>
+                <button type="button" class="pill" data-filter="medical">仅检查</button>
+              </div>
+              <div class="toolbar-right">
+                <span class="muted" id="list-scope-label">本月</span>
+                <span class="muted">检查 <b id="stat-reports">0</b> · 跨度 <b id="stat-span">—</b></span>
+                <button type="button" id="refresh-btn" class="btn-ghost">刷新</button>
+              </div>
+            </div>
+            <ol id="timeline" class="timeline"></ol>
           </div>
         </div>
-        <ol id="timeline" class="timeline"></ol>
       </div>
     </section>
 
